@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Character Sheet — Echoes Beneath</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/sheet.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cinzel:wght@400;600&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet" />
+</head>
+<body class="sheet-page">
+
+  <div class="stars"></div>
+  <div class="stars stars-2"></div>
+
+  <header class="sheet-header">
+    <a href="index.html" class="back-link">← All Heroes</a>
+    <div class="sheet-header-name">
+      <p class="sheet-header-class" id="headerClass"></p>
+      <h1 class="sheet-header-title" id="headerName">Loading…</h1>
+    </div>
+    <div class="sheet-header-player" id="headerPlayer"></div>
+  </header>
+
+  <div class="sheet-loading" id="sheetLoading">
+    <div class="loading-orb"></div>
+    <p>Summoning the hero…</p>
+  </div>
+
+  <div class="sheet-error hidden" id="sheetError">
+    <p>✦ Hero not found.</p>
+    <a href="index.html">← Return</a>
+  </div>
+
+  <main class="sheet-main hidden" id="sheetMain">
+
+    <!-- Portrait + identity -->
+    <section class="sheet-identity">
+      <div class="sheet-portrait-wrap" id="sheetPortrait"></div>
+      <div class="sheet-identity-info">
+        <p class="identity-meta" id="identityMeta"></p>
+
+        <!-- HP -->
+        <div class="hp-block">
+          <div class="hp-numbers">
+            <span class="hp-current" id="hpCurrent">—</span>
+            <span class="hp-sep">/</span>
+            <span class="hp-max" id="hpMax">—</span>
+            <span class="hp-label">HP</span>
+            <span class="hp-temp-label" id="hpTempLabel"></span>
+          </div>
+          <div class="hp-bar-track">
+            <div class="hp-bar-fill" id="hpBarFill"></div>
+          </div>
+
+          <div class="hp-actions">
+            <div class="hp-input-row">
+              <input type="number" id="hpAmount" min="1" max="999" placeholder="Amount" aria-label="HP amount" />
+              <button class="action-btn btn-damage"  id="btnDamage">Damage</button>
+              <button class="action-btn btn-heal"    id="btnHeal">Heal</button>
+              <button class="action-btn btn-temp"    id="btnTemp">Temp HP</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Death Saves -->
+        <div class="death-saves" id="deathSavesBlock">
+          <p class="ds-label">Death Saves</p>
+          <div class="ds-row">
+            <span class="ds-text">Successes</span>
+            <div class="ds-pips" id="dsSuccess">
+              <button class="ds-pip" data-index="0" data-type="successes" aria-label="Success 1"></button>
+              <button class="ds-pip" data-index="1" data-type="successes" aria-label="Success 2"></button>
+              <button class="ds-pip" data-index="2" data-type="successes" aria-label="Success 3"></button>
+            </div>
+          </div>
+          <div class="ds-row">
+            <span class="ds-text">Failures</span>
+            <div class="ds-pips" id="dsFailure">
+              <button class="ds-pip ds-pip-fail" data-index="0" data-type="failures" aria-label="Failure 1"></button>
+              <button class="ds-pip ds-pip-fail" data-index="1" data-type="failures" aria-label="Failure 2"></button>
+              <button class="ds-pip ds-pip-fail" data-index="2" data-type="failures" aria-label="Failure 3"></button>
+            </div>
+          </div>
+          <button class="reset-ds-btn" id="btnResetDS">Reset</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Conditions -->
+    <section class="sheet-section">
+      <h2 class="sheet-section-title">Conditions</h2>
+      <div class="conditions-grid" id="conditionsGrid"></div>
+    </section>
+
+    <!-- Spell Slots -->
+    <section class="sheet-section" id="spellSlotsSection">
+      <h2 class="sheet-section-title">Spell Slots</h2>
+      <div class="slots-grid" id="slotsGrid"></div>
+    </section>
+
+    <!-- Spells -->
+    <section class="sheet-section" id="spellsSection">
+      <h2 class="sheet-section-title">Spells</h2>
+      <div class="spells-grid" id="spellsGrid"></div>
+    </section>
+
+    <!-- Inventory -->
+    <section class="sheet-section" id="inventorySection">
+      <h2 class="sheet-section-title">Inventory</h2>
+      <div class="inventory-list" id="inventoryList"></div>
+    </section>
+
+    <!-- Stats -->
+    <section class="sheet-section" id="statsSection">
+      <h2 class="sheet-section-title">Stats</h2>
+      <div class="stats-grid" id="statsGrid"></div>
+    </section>
+
+    <!-- Notes -->
+    <section class="sheet-section">
+      <h2 class="sheet-section-title">Notes</h2>
+      <textarea class="notes-area" id="notesArea" placeholder="Session notes, reminders, lore…" rows="5"></textarea>
+      <button class="action-btn btn-save-notes" id="btnSaveNotes">Save Notes</button>
+    </section>
+
+  </main>
+
+  <!-- Toast -->
+  <div class="toast hidden" id="toast"></div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/sheet.js"></script>
+</body>
+</html>

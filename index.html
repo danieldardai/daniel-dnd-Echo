@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Echoes Beneath</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cinzel:wght@400;600&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <div class="stars" id="stars"></div>
+  <div class="stars stars-2" id="stars2"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-rune">᚛</span>
+        <div class="logo-text">
+          <h1 class="logo-title">Echoes Beneath</h1>
+          <p class="logo-sub">Choose Your Fate</p>
+        </div>
+        <span class="logo-rune">᚜</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="page-intro">
+      <p class="intro-text">The realm stirs. The ancient seals weaken.<br>Who among you will answer the call?</p>
+    </div>
+
+    <section class="character-grid" id="characterGrid">
+      <div class="loading-state" id="loadingState">
+        <div class="loading-orb"></div>
+        <p>Summoning heroes&hellip;</p>
+      </div>
+    </section>
+
+    <div class="empty-state hidden" id="emptyState">
+      <p class="empty-rune">⌘</p>
+      <p>No heroes have been found yet.<br>Add the first character in Firestore.</p>
+    </div>
+
+    <div class="error-state hidden" id="errorState">
+      <p class="error-icon">✦</p>
+      <p id="errorMessage">Could not reach the realm&hellip;</p>
+    </div>
+
+    <!-- Session Log -->
+    <section class="session-log-section">
+      <div class="section-header">
+        <h2 class="section-title">Session Log</h2>
+        <span class="live-badge">⬤ Live</span>
+      </div>
+      <div class="log-feed" id="logFeed">
+        <div class="log-empty">No events yet this session…</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>A private campaign &mdash; <em>Echoes Beneath</em></p>
+  </footer>
+
+  <div class="modal-backdrop hidden" id="modalBackdrop">
+    <div class="character-modal" id="characterModal" role="dialog" aria-modal="true" aria-labelledby="modalName">
+      <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+      <div class="modal-portrait" id="modalPortrait"></div>
+      <div class="modal-body">
+        <p class="modal-class" id="modalClass"></p>
+        <h2 class="modal-name" id="modalName"></h2>
+        <p class="modal-player">Player: <span id="modalPlayer"></span></p>
+        <hr class="modal-divider" />
+        <p class="modal-bio" id="modalBio"></p>
+        <div class="modal-stats" id="modalStats"></div>
+        <div class="modal-extra" id="modalExtra"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/characters.js"></script>
+  <script type="module" src="js/session-log.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
