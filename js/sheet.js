@@ -1,6 +1,6 @@
 import { db } from "./firebase-config.js";
 import {
-  doc, onSnapshot, updateDoc, addDoc,
+  doc, onSnapshot, updateDoc, addDoc, getDoc,
   collection, serverTimestamp, orderBy, query, limit
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -17,6 +17,7 @@ if (!charId) showError();
 const sidebarName         = document.getElementById("sidebarName");
 const sidebarMeta         = document.getElementById("sidebarMeta");
 const sidebarPlayer       = document.getElementById("sidebarPlayer");
+const sidebarLocation     = document.getElementById("sidebarLocation");
 const portraitImgWrap     = document.getElementById("portraitImgWrap");
 const portraitPlaceholder = document.getElementById("portraitPlaceholder");
 const portraitInput       = document.getElementById("portraitInput");
@@ -50,8 +51,8 @@ const btnSaveNotes = document.getElementById("btnSaveNotes");
 const takenCheckbox= document.getElementById("takenCheckbox");
 
 // Log feeds
-const globalLogFeed = document.getElementById("globalLogFeed");
-const localLogFeed  = document.getElementById("localLogFeed");
+const locationLogFeed = document.getElementById("locationLogFeed");
+const localLogFeed    = document.getElementById("localLogFeed");
 
 const toastEl = document.getElementById("toast");
 
@@ -111,8 +112,17 @@ navTabs.forEach(btn => {
     tabPanels.forEach(p => p.classList.add("hidden"));
     btn.classList.add("active");
     document.getElementById(`tab-${btn.dataset.tab}`).classList.remove("hidden");
+    if (btn.dataset.tab === "dice") renderDiceTab();
   });
 });
+
+function switchToTab(name) {
+  navTabs.forEach(t => t.classList.remove("active"));
+  tabPanels.forEach(p => p.classList.add("hidden"));
+  const btn = document.querySelector(`.nav-tab[data-tab="${name}"]`);
+  btn?.classList.add("active");
+  document.getElementById(`tab-${name}`)?.classList.remove("hidden");
+}
 
 // ---- Portrait upload (canvas resize → base64 → Firestore) ------------------
 
@@ -184,6 +194,160 @@ function renderHP(data) {
   hpTempLabel.textContent    = temp > 0 ? `+${temp} tmp` : "";
 }
 
+// ---- Dice Roll tab ----------------------------------------------------------
+
+const DICE_TYPES = [4, 6, 8, 10, 12, 20, 100];
+
+let diceState = { type: 20, qty: 1, bonus: 0, context: null };
+
+function parseDamage(str) {
+  const m = /(\d+)d(\d+)([+-]\d+)?/.exec(str || "");
+  if (!m) return null;
+  return { qty: parseInt(m[1]) || 1, type: parseInt(m[2]) || 6, bonus: m[3] ? parseInt(m[3]) : 0 };
+}
+
+function setDiceContext(label, damageStr) {
+  const parsed = parseDamage(damageStr);
+  if (parsed) Object.assign(diceState, parsed);
+  diceState.context = { label, damage: damageStr };
+  switchToTab("dice");
+  renderDiceTab();
+}
+
+function renderDiceTab() {
+  const el = document.getElementById("tab-dice");
+  if (!el) return;
+
+  const bonusStr = diceState.bonus > 0 ? `+${diceState.bonus}` : diceState.bonus < 0 ? `${diceState.bonus}` : "";
+  const rollLabel = `${diceState.qty}d${diceState.type}${bonusStr}`;
+
+  el.innerHTML = `
+    <div class="dice-layout">
+      <section class="dice-section">
+        <h2 class="dice-section-title">Die Type</h2>
+        <div class="dice-faces" id="diceFaces"></div>
+      </section>
+      <section class="dice-section">
+        <div class="dice-controls-row">
+          <div class="dice-ctrl-group">
+            <span class="dice-ctrl-label">Quantity</span>
+            <div class="dice-qty-ctrl">
+              <button class="dice-qty-btn" id="diceQtyMinus">−</button>
+              <span class="dice-qty-val" id="diceQtyVal">${diceState.qty}</span>
+              <button class="dice-qty-btn" id="diceQtyPlus">+</button>
+            </div>
+          </div>
+          <div class="dice-ctrl-group">
+            <span class="dice-ctrl-label">Bonus / Modifier</span>
+            <input type="number" class="dice-bonus-input" id="diceBonusInput" value="${diceState.bonus}" />
+          </div>
+          <span class="dice-formula">${rollLabel}</span>
+        </div>
+      </section>
+      ${diceState.context ? `
+        <div class="dice-context-bar">
+          <span class="dice-context-label">⚔️ ${diceState.context.label}${diceState.context.damage ? ` (${diceState.context.damage})` : ""}</span>
+          <button class="dice-context-clear" id="diceContextClear">✕ Clear</button>
+        </div>
+      ` : ""}
+      <button class="dice-roll-btn" id="diceRollBtn">🎲 Roll ${rollLabel}</button>
+      <div class="dice-result-area" id="diceResultArea"></div>
+    </div>
+  `;
+
+  // Die face buttons
+  const facesEl = el.querySelector("#diceFaces");
+  DICE_TYPES.forEach(d => {
+    const btn = document.createElement("button");
+    btn.className = "dice-face-btn" + (diceState.type === d ? " active" : "");
+    btn.textContent = `d${d}`;
+    btn.addEventListener("click", () => { diceState.type = d; renderDiceTab(); });
+    facesEl.appendChild(btn);
+  });
+
+  // Qty controls
+  el.querySelector("#diceQtyMinus").addEventListener("click", () => {
+    if (diceState.qty > 1) { diceState.qty--; renderDiceTab(); }
+  });
+  el.querySelector("#diceQtyPlus").addEventListener("click", () => {
+    if (diceState.qty < 20) { diceState.qty++; renderDiceTab(); }
+  });
+
+  // Bonus input
+  el.querySelector("#diceBonusInput").addEventListener("change", e => {
+    diceState.bonus = parseInt(e.target.value) || 0;
+    const bonusStr2 = diceState.bonus > 0 ? `+${diceState.bonus}` : diceState.bonus < 0 ? `${diceState.bonus}` : "";
+    el.querySelector(".dice-formula").textContent = `${diceState.qty}d${diceState.type}${bonusStr2}`;
+    el.querySelector("#diceRollBtn").textContent = `🎲 Roll ${diceState.qty}d${diceState.type}${bonusStr2}`;
+  });
+
+  // Clear context
+  el.querySelector("#diceContextClear")?.addEventListener("click", () => {
+    diceState.context = null;
+    renderDiceTab();
+  });
+
+  // Roll
+  el.querySelector("#diceRollBtn").addEventListener("click", executeDiceRoll);
+}
+
+async function executeDiceRoll() {
+  const rolls  = Array.from({ length: diceState.qty }, () => Math.floor(Math.random() * diceState.type) + 1);
+  const sum    = rolls.reduce((a, b) => a + b, 0);
+  const total  = sum + diceState.bonus;
+  const bonus  = diceState.bonus;
+  const bonusStr = bonus > 0 ? `+${bonus}` : bonus < 0 ? `${bonus}` : "";
+  const formula  = `${diceState.qty}d${diceState.type}${bonusStr}`;
+
+  const isCrit   = diceState.type === 20 && diceState.qty === 1 && rolls[0] === 20;
+  const isFumble = diceState.type === 20 && diceState.qty === 1 && rolls[0] === 1;
+
+  let msg;
+  if (diceState.context) {
+    msg = `${currentData.name} used ${diceState.context.label} → rolled ${total} on ${formula}`;
+    if (diceState.qty > 1 || bonus !== 0) {
+      const parts = rolls.join(" + ") + (bonus !== 0 ? ` ${bonusStr}` : "");
+      msg += ` (${parts})`;
+    }
+  } else {
+    msg = `${currentData.name} rolled ${formula} → ${total}`;
+    if (diceState.qty > 1) msg += ` (${rolls.join(" + ")})`;
+  }
+  if (isCrit)   msg += " — CRITICAL HIT!";
+  if (isFumble) msg += " — FUMBLE!";
+
+  await addDoc(collection(db, "sessionLog"), {
+    type: "roll", actor: currentData.name, message: msg,
+    charId, timestamp: serverTimestamp(),
+  });
+
+  showRollResult(rolls, total, formula, isCrit, isFumble);
+  toast(`🎲 ${total}${isCrit ? " ✨ Crit!" : isFumble ? " 💀 Fumble!" : ""}`);
+}
+
+function showRollResult(rolls, total, formula, isCrit, isFumble) {
+  const area = document.getElementById("diceResultArea");
+  if (!area) return;
+
+  const bonus    = diceState.bonus;
+  const bonusStr = bonus > 0 ? `+${bonus}` : bonus < 0 ? `${bonus}` : "";
+  const pipsHTML = rolls.length > 1 || bonus !== 0 ? `
+    <div class="dice-result-pips">
+      ${rolls.map(r => `<span class="dice-result-pip">${r}</span>`).join("")}
+      ${bonus !== 0 ? `<span class="dice-result-bonus">${bonusStr}</span>` : ""}
+    </div>` : "";
+
+  area.innerHTML = `
+    <div class="dice-result${isCrit ? " crit" : isFumble ? " fumble" : ""}">
+      <div class="dice-result-total">${total}</div>
+      <div class="dice-result-label">${formula}</div>
+      ${pipsHTML}
+      ${isCrit   ? `<div class="dice-result-flag">✨ Critical Hit!</div>` : ""}
+      ${isFumble ? `<div class="dice-result-flag fumble-flag">💀 Fumble!</div>` : ""}
+    </div>
+  `;
+}
+
 // ---- Actions tab: three columns -------------------------------------------
 
 const GENERAL_ACTIONS = [
@@ -245,14 +409,7 @@ function renderWeaponActions(data) {
     const meta = [item.damage, item.range ? `Range: ${item.range}` : null].filter(Boolean).join(" · ");
     weaponsActionsCol.appendChild(makeActionCard(
       item.emoji || "⚔️", item.name, meta,
-      async () => {
-        await addDoc(collection(db, "sessionLog"), {
-          type: "damage", actor: currentData.name,
-          message: `${currentData.name} attacked with ${item.name}${item.damage ? ` (${item.damage})` : ""}`,
-          charId, timestamp: serverTimestamp()
-        });
-        toast(`⚔️ ${item.name} attack!`);
-      }
+      () => setDiceContext(item.name, item.damage || "1d6")
     ));
   });
 }
@@ -492,11 +649,15 @@ function renderInventory(data) {
         </div>
         ${effectsHTML ? `<div class="inv-card-effects">${effectsHTML}</div>` : ""}
         <div class="inv-card-actions">
+          ${item.damage || item.weapon === true ? `<button class="inv-btn attack-btn">⚔️ Attack</button>` : ""}
           <button class="inv-btn equip-btn ${equipped ? "equipped-btn" : ""}">
             ${equipped ? "Unequip" : "Equip"}
           </button>
         </div>
       `;
+      card.querySelector(".attack-btn")?.addEventListener("click", () => {
+        setDiceContext(item.name, item.damage || "1d6");
+      });
       card.querySelector(".equip-btn").addEventListener("click", async () => {
         const curInv = [...(currentData.inventory || [])];
         curInv[idx]  = { ...curInv[idx], equipped: !equipped };
@@ -596,6 +757,20 @@ function renderNotes(data) {
   if (document.activeElement !== notesArea) notesArea.value = data.notes || "";
 }
 
+let lastLocationId = undefined;
+async function renderLocation(locationId) {
+  if (locationId === lastLocationId) return;
+  lastLocationId = locationId;
+  if (!locationId) { sidebarLocation.textContent = ""; return; }
+  try {
+    const snap = await getDoc(doc(db, "locations", locationId));
+    if (snap.exists()) {
+      const loc = snap.data();
+      sidebarLocation.textContent = `${loc.emoji || "📍"} ${loc.name}`;
+    }
+  } catch (_) { sidebarLocation.textContent = ""; }
+}
+
 function renderTaken(data) {
   takenCheckbox.checked = !!data.taken;
 }
@@ -656,7 +831,7 @@ takenCheckbox.addEventListener("change", async () => {
 
 const LOG_ICONS = {
   damage:"⚔️", heal:"💚", spell:"✨", slot:"🔮",
-  condition:"🌀", inventory:"🎒", death:"💀", note:"📜", default:"📖"
+  condition:"🌀", inventory:"🎒", death:"💀", note:"📜", roll:"🎲", default:"📖"
 };
 
 function timeAgo(ts) {
@@ -684,8 +859,45 @@ function buildLogEntry(id, data) {
   return el;
 }
 
-const globalEntries = {};
-const localEntries  = {};
+const localEntries    = {};
+const locationEntries = {};
+let   allCharData     = {};
+let   locationCharIds = new Set();
+
+function rebuildLocationCharIds() {
+  const myLocId = currentData.locationId ?? null;
+  locationCharIds = new Set();
+  if (myLocId) {
+    Object.entries(allCharData).forEach(([id, d]) => {
+      if ((d.locationId ?? null) === myLocId) locationCharIds.add(id);
+    });
+    locationCharIds.add(charId);
+  }
+}
+
+function rerenderLocationFeed() {
+  locationLogFeed.innerHTML = "";
+  const myLocId = currentData.locationId ?? null;
+
+  if (!myLocId) {
+    locationLogFeed.innerHTML = `<div class="log-empty">Not assigned to a location yet…</div>`;
+    return;
+  }
+
+  const visible = Object.values(locationEntries)
+    .filter(e => locationCharIds.has(e.data.charId))
+    .sort((a, b) => {
+      const ta = a.data.timestamp?.seconds ?? Number.MAX_SAFE_INTEGER;
+      const tb = b.data.timestamp?.seconds ?? Number.MAX_SAFE_INTEGER;
+      return tb - ta;
+    });
+
+  if (!visible.length) {
+    locationLogFeed.innerHTML = `<div class="log-empty">No events in this location yet…</div>`;
+    return;
+  }
+  visible.forEach(e => locationLogFeed.appendChild(e.el));
+}
 
 function initLogs() {
   const q = query(collection(db, "sessionLog"), orderBy("timestamp", "desc"), limit(80));
@@ -696,15 +908,7 @@ function initLogs() {
       const data = change.doc.data();
 
       if (change.type === "added" || change.type === "modified") {
-        // Global feed
-        globalEntries[id]?.remove();
-        const gEl = buildLogEntry(id, data);
-        globalEntries[id] = gEl;
-        const gEmpty = globalLogFeed.querySelector(".log-empty");
-        if (gEmpty) gEmpty.remove();
-        globalLogFeed.insertBefore(gEl, globalLogFeed.firstChild);
-
-        // Local feed — only entries belonging to this character
+        // Character log — events for this character only
         if (data.charId === charId || data.actor === currentData.name) {
           localEntries[id]?.remove();
           const lEl = buildLogEntry(id, data);
@@ -713,13 +917,27 @@ function initLogs() {
           if (lEmpty) lEmpty.remove();
           localLogFeed.insertBefore(lEl, localLogFeed.firstChild);
         }
+
+        // Location feed — store all, filter on render
+        locationEntries[id] = { el: buildLogEntry(id, data), data };
       } else if (change.type === "removed") {
-        globalEntries[id]?.remove();
-        delete globalEntries[id];
         localEntries[id]?.remove();
         delete localEntries[id];
+        delete locationEntries[id];
       }
     });
+    rerenderLocationFeed();
+  });
+
+  // Track all characters to know who shares this location
+  onSnapshot(collection(db, "characters"), (snapshot) => {
+    snapshot.docChanges().forEach(change => {
+      const id = change.doc.id;
+      if (change.type === "removed") delete allCharData[id];
+      else allCharData[id] = change.doc.data();
+    });
+    rebuildLocationCharIds();
+    rerenderLocationFeed();
   });
 }
 
@@ -746,6 +964,9 @@ onSnapshot(charRef, (snap) => {
   renderStats(data);
   renderNotes(data);
   renderTaken(data);
+  renderLocation(data.locationId ?? null);
+  rebuildLocationCharIds();
+  rerenderLocationFeed();
 }, (err) => {
   showError();
   console.error("Sheet listener error:", err);

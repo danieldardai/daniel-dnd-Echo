@@ -1069,6 +1069,43 @@ body.sheet-page {
 
 /* ---- Session log on index page ---- */
 .session-log-section { margin-top: 3.5rem; }
+
+/* ---- Log location filter tabs ---- */
+.log-location-tabs {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.8rem;
+}
+.log-loc-tab {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--parchment-dim);
+  font-family: var(--font-heading);
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.log-loc-tab:hover { border-color: var(--border-bright); color: var(--parchment); }
+.log-loc-tab.active {
+  background: rgba(192,57,43,0.15);
+  border-color: var(--gold-light);
+  color: var(--gold-light);
+}
+
+/* ---- Sidebar location line (character sheet) ---- */
+.sidebar-location {
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--gold-dim);
+  text-align: center;
+  margin-top: 0.1rem;
+  min-height: 1em;
+}
 .section-header {
   display: flex;
   align-items: center;
@@ -1135,4 +1172,301 @@ body.sheet-page {
   .tab-panel { position: static; overflow: visible; height: auto; }
   .log-split { grid-template-columns: 1fr; height: auto; }
   .log-col { max-height: 300px; }
+}
+
+/* ============================================================
+   DICE ROLL TAB
+   ============================================================ */
+
+#tab-dice {
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+.dice-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.dice-section {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.dice-section-title {
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--gold-dim);
+  margin: 0 0 0.8rem;
+}
+
+/* Die face buttons */
+.dice-faces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.dice-face-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.05);
+  color: var(--parchment);
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.dice-face-btn:hover {
+  background: rgba(230,168,23,0.12);
+  border-color: var(--gold-dim);
+}
+.dice-face-btn.active {
+  background: rgba(230,168,23,0.22);
+  border-color: var(--gold);
+  color: var(--gold-light);
+  box-shadow: 0 0 8px rgba(230,168,23,0.3);
+  transform: scale(1.08);
+}
+
+/* Controls row */
+.dice-controls-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dice-ctrl-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dice-ctrl-label {
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold-dim);
+}
+
+.dice-qty-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.dice-qty-btn {
+  width: 32px;
+  height: 32px;
+  background: rgba(255,255,255,0.06);
+  border: none;
+  color: var(--parchment);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.dice-qty-btn:hover { background: rgba(255,255,255,0.12); }
+
+.dice-qty-val {
+  min-width: 28px;
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  color: var(--gold-light);
+}
+
+.dice-bonus-input {
+  width: 64px;
+  height: 32px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--parchment);
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  padding: 0 0.3rem;
+}
+.dice-bonus-input:focus { outline: none; border-color: var(--gold-dim); }
+
+.dice-formula {
+  margin-left: auto;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.05em;
+}
+
+/* Context bar */
+.dice-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(192,57,27,0.12);
+  border: 1px solid rgba(192,57,27,0.35);
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  gap: 0.75rem;
+}
+
+.dice-context-label {
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  color: var(--ember-light);
+  letter-spacing: 0.05em;
+}
+
+.dice-context-clear {
+  background: none;
+  border: 1px solid rgba(192,57,27,0.4);
+  border-radius: 4px;
+  color: var(--ember-light);
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+.dice-context-clear:hover { opacity: 1; }
+
+/* Roll button */
+.dice-roll-btn {
+  width: 100%;
+  padding: 0.9rem;
+  background: linear-gradient(135deg, rgba(192,57,27,0.35), rgba(192,57,27,0.18));
+  border: 1px solid rgba(192,57,27,0.6);
+  border-radius: 8px;
+  color: var(--parchment);
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+}
+.dice-roll-btn:hover {
+  background: linear-gradient(135deg, rgba(192,57,27,0.55), rgba(192,57,27,0.3));
+  box-shadow: 0 0 14px rgba(192,57,27,0.35);
+}
+.dice-roll-btn:active { transform: scale(0.97); }
+
+/* Result area */
+.dice-result-area { min-height: 2rem; }
+
+.dice-result {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem;
+  text-align: center;
+  background: rgba(255,255,255,0.03);
+  animation: diceResultPop 0.25s ease;
+}
+.dice-result.crit {
+  border-color: rgba(230,168,23,0.7);
+  background: rgba(230,168,23,0.07);
+  box-shadow: 0 0 18px rgba(230,168,23,0.25);
+}
+.dice-result.fumble {
+  border-color: rgba(192,57,27,0.7);
+  background: rgba(192,57,27,0.08);
+  box-shadow: 0 0 18px rgba(192,57,27,0.25);
+}
+
+@keyframes diceResultPop {
+  from { opacity: 0; transform: scale(0.88) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.dice-result-total {
+  font-family: var(--font-heading);
+  font-size: 3.5rem;
+  font-weight: 700;
+  color: var(--gold-light);
+  line-height: 1;
+}
+.dice-result.crit   .dice-result-total { color: var(--gold); }
+.dice-result.fumble .dice-result-total { color: var(--ember-light); }
+
+.dice-result-label {
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--gold-dim);
+  margin-top: 0.2rem;
+}
+
+.dice-result-pips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.dice-result-pip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 0.4rem;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--border);
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  color: var(--parchment);
+}
+
+.dice-result-bonus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 0.4rem;
+  border-radius: 5px;
+  background: rgba(230,168,23,0.12);
+  border: 1px solid rgba(230,168,23,0.3);
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  color: var(--gold-dim);
+}
+
+.dice-result-flag {
+  margin-top: 0.6rem;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.dice-result-flag.fumble-flag { color: var(--ember-light); }
+
+/* Attack button in inventory */
+.inv-btn.attack-btn {
+  background: rgba(192,57,27,0.18);
+  border-color: rgba(192,57,27,0.45);
+  color: var(--ember-light);
+}
+.inv-btn.attack-btn:hover {
+  background: rgba(192,57,27,0.32);
 }
