@@ -206,10 +206,35 @@ function parseDamage(str) {
   return { qty: parseInt(m[1]) || 1, type: parseInt(m[2]) || 6, bonus: m[3] ? parseInt(m[3]) : 0 };
 }
 
-function setDiceContext(label, damageStr) {
+// Ammo auto-detection: explicit `ammo` field on weapon overrides name patterns.
+const AMMO_PAIRS = [
+  { weapon: /crossbow/i,                      ammo: /bolt/i },
+  { weapon: /longbow|shortbow|\bbow\b/i,       ammo: /arrow/i },
+  { weapon: /blowgun/i,                        ammo: /needle/i },
+  { weapon: /sling\b/i,                        ammo: /bullet|stone/i },
+  { weapon: /throwing.knife|shuriken|kunai/i,  ammo: /throwing.knife|shuriken|kunai/i },
+];
+
+function findAmmoConsumable(ctx, inventory) {
+  if (!ctx) return null;
+  const needle = ctx.ammo ? ctx.ammo.toLowerCase() : null;
+  if (needle) {
+    return inventory.find(i => (i.name || "").toLowerCase() === needle && !isEquipment(i)) ?? null;
+  }
+  const wName = ctx.label || "";
+  for (const p of AMMO_PAIRS) {
+    if (p.weapon.test(wName)) {
+      const found = inventory.find(i => p.ammo.test(i.name || "") && !isEquipment(i));
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function setDiceContext(label, damageStr, ammoOverride = null) {
   const parsed = parseDamage(damageStr);
   if (parsed) Object.assign(diceState, parsed);
-  diceState.context = { label, damage: damageStr };
+  diceState.context = { label, damage: damageStr, ammo: ammoOverride };
   switchToTab("dice");
   renderDiceTab();
 }
@@ -244,12 +269,18 @@ function renderDiceTab() {
           <span class="dice-formula">${rollLabel}</span>
         </div>
       </section>
-      ${diceState.context ? `
+      ${diceState.context ? (() => {
+          const ammoItem = findAmmoConsumable(diceState.context, currentData.inventory || []);
+          const ammoQty  = ammoItem ? (ammoItem.qty ?? 1) : null;
+          const ammoHtml = ammoItem
+            ? ` <span class="dice-ammo-count ${ammoQty <= 0 ? "empty" : ammoQty <= 5 ? "low" : ""}">${ammoItem.emoji || "🏹"} ${ammoItem.name}: ${ammoQty}</span>`
+            : "";
+          return `
         <div class="dice-context-bar">
-          <span class="dice-context-label">⚔️ ${diceState.context.label}${diceState.context.damage ? ` (${diceState.context.damage})` : ""}</span>
+          <span class="dice-context-label">⚔️ ${diceState.context.label}${diceState.context.damage ? ` (${diceState.context.damage})` : ""}${ammoHtml}</span>
           <button class="dice-context-clear" id="diceContextClear">✕ Clear</button>
-        </div>
-      ` : ""}
+        </div>`;
+        })() : ""}
       <button class="dice-roll-btn" id="diceRollBtn">🎲 Roll ${rollLabel}</button>
       <div class="dice-result-area" id="diceResultArea"></div>
     </div>
@@ -292,6 +323,17 @@ function renderDiceTab() {
 }
 
 async function executeDiceRoll() {
+  // Ammo check — find linked consumable and block if depleted
+  const inv      = [...(currentData.inventory || [])];
+  const ammoItem = findAmmoConsumable(diceState.context, inv);
+  const ammoIdx  = ammoItem ? inv.indexOf(ammoItem) : -1;
+
+  if (ammoItem && (ammoItem.qty ?? 1) <= 0) {
+    toast(`❌ No ${ammoItem.name} remaining!`);
+    renderDiceTab(); // refresh count display
+    return;
+  }
+
   const rolls  = Array.from({ length: diceState.qty }, () => Math.floor(Math.random() * diceState.type) + 1);
   const sum    = rolls.reduce((a, b) => a + b, 0);
   const total  = sum + diceState.bonus;
@@ -316,13 +358,30 @@ async function executeDiceRoll() {
   if (isCrit)   msg += " — CRITICAL HIT!";
   if (isFumble) msg += " — FUMBLE!";
 
-  await addDoc(collection(db, "sessionLog"), {
-    type: "roll", actor: currentData.name, message: msg,
-    charId, timestamp: serverTimestamp(),
-  });
+  // Deduct ammo and write log simultaneously
+  const promises = [
+    addDoc(collection(db, "sessionLog"), {
+      type: "roll", actor: currentData.name, message: msg,
+      charId, timestamp: serverTimestamp(),
+    })
+  ];
+  if (ammoIdx !== -1) {
+    const newQty = (ammoItem.qty ?? 1) - 1;
+    inv[ammoIdx] = { ...ammoItem, qty: newQty };
+    promises.push(updateDoc(charRef, { inventory: inv }));
+  }
+  await Promise.all(promises);
+
+  if (ammoIdx !== -1) {
+    const remaining = inv[ammoIdx].qty;
+    if (remaining === 0) toast(`⚠️ ${ammoItem.name} — none left!`);
+    else if (remaining <= 5) toast(`🎲 ${total} · ${ammoItem.name}: ${remaining} left`);
+    else toast(`🎲 ${total}${isCrit ? " ✨ Crit!" : isFumble ? " 💀 Fumble!" : ""}`);
+  } else {
+    toast(`🎲 ${total}${isCrit ? " ✨ Crit!" : isFumble ? " 💀 Fumble!" : ""}`);
+  }
 
   showRollResult(rolls, total, formula, isCrit, isFumble);
-  toast(`🎲 ${total}${isCrit ? " ✨ Crit!" : isFumble ? " 💀 Fumble!" : ""}`);
 }
 
 function showRollResult(rolls, total, formula, isCrit, isFumble) {
@@ -409,7 +468,7 @@ function renderWeaponActions(data) {
     const meta = [item.damage, item.range ? `Range: ${item.range}` : null].filter(Boolean).join(" · ");
     weaponsActionsCol.appendChild(makeActionCard(
       item.emoji || "⚔️", item.name, meta,
-      () => setDiceContext(item.name, item.damage || "1d6")
+      () => setDiceContext(item.name, item.damage || "1d6", item.ammo || null)
     ));
   });
 }
@@ -656,7 +715,7 @@ function renderInventory(data) {
         </div>
       `;
       card.querySelector(".attack-btn")?.addEventListener("click", () => {
-        setDiceContext(item.name, item.damage || "1d6");
+        setDiceContext(item.name, item.damage || "1d6", item.ammo || null);
       });
       card.querySelector(".equip-btn").addEventListener("click", async () => {
         const curInv = [...(currentData.inventory || [])];

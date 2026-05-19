@@ -1461,6 +1461,28 @@ body.sheet-page {
 }
 .dice-result-flag.fumble-flag { color: var(--ember-light); }
 
+/* Ammo count badge in context bar */
+.dice-ammo-count {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--parchment-dim);
+}
+.dice-ammo-count.low {
+  background: rgba(230,168,23,0.12);
+  border-color: rgba(230,168,23,0.35);
+  color: var(--gold-dim);
+}
+.dice-ammo-count.empty {
+  background: rgba(192,57,27,0.15);
+  border-color: rgba(192,57,27,0.45);
+  color: var(--ember-light);
+}
+
 /* Attack button in inventory */
 .inv-btn.attack-btn {
   background: rgba(192,57,27,0.18);
