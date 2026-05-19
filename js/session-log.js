@@ -33,16 +33,21 @@ function timeAgo(ts) {
 
 function buildEntry(id, data) {
   const el = document.createElement("div");
-  el.className = "log-entry";
+  const isTurn = data.type === "turn";
+  el.className = "log-entry" + (isTurn ? " log-entry--turn" : "");
   el.setAttribute("data-id", id);
-  el.innerHTML = `
-    <span class="log-icon" aria-hidden="true">${ICONS[data.type] || ICONS.default}</span>
-    <div class="log-content">
-      <span class="log-actor">${data.actor || "Unknown"}</span>
-      <span class="log-message">${data.message || ""}</span>
-    </div>
-    <span class="log-time">${timeAgo(data.timestamp)}</span>
-  `;
+  el.innerHTML = isTurn
+    ? `<div class="log-turn-narrative">
+         <span class="log-turn-label">DM</span>
+         <span class="log-turn-text">${data.message || ""}</span>
+         <span class="log-time">${timeAgo(data.timestamp)}</span>
+       </div>`
+    : `<span class="log-icon" aria-hidden="true">${ICONS[data.type] || ICONS.default}</span>
+       <div class="log-content">
+         <span class="log-actor">${data.actor || "Unknown"}</span>
+         <span class="log-message">${data.message || ""}</span>
+       </div>
+       <span class="log-time">${timeAgo(data.timestamp)}</span>`;
   return el;
 }
 

@@ -422,6 +422,46 @@ body.sheet-page {
 .log-message { color: var(--parchment); }
 .log-time    { font-size: 0.65rem; color: var(--parchment-dim); white-space: nowrap; flex-shrink: 0; }
 
+.log-entry--turn {
+  background: rgba(90, 16, 16, 0.18);
+  border-color: rgba(192, 57, 43, 0.4);
+  display: block;
+  padding: 0;
+}
+.log-turn-narrative {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.55rem 0.8rem;
+}
+.log-turn-label {
+  font-family: var(--font-heading);
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #c0392b;
+  background: rgba(192, 57, 43, 0.15);
+  border: 1px solid rgba(192, 57, 43, 0.35);
+  border-radius: 3px;
+  padding: 0.1rem 0.35rem;
+  flex-shrink: 0;
+}
+.log-turn-text {
+  flex: 1;
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.88rem;
+  font-style: italic;
+  color: var(--parchment);
+  line-height: 1.5;
+}
+.log-entry--turn .log-time {
+  font-size: 0.65rem;
+  color: var(--parchment-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .live-badge {
   font-family: var(--font-heading);
   font-size: 0.55rem;

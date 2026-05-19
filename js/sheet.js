@@ -941,16 +941,21 @@ function timeAgo(ts) {
 
 function buildLogEntry(id, data) {
   const el = document.createElement("div");
-  el.className = "log-entry";
+  const isTurn = data.type === "turn";
+  el.className = "log-entry" + (isTurn ? " log-entry--turn" : "");
   el.dataset.id = id;
-  el.innerHTML = `
-    <span class="log-icon">${LOG_ICONS[data.type] || LOG_ICONS.default}</span>
-    <div class="log-content">
-      <span class="log-actor">${data.actor || "Unknown"}</span>
-      <span class="log-message">${data.message || ""}</span>
-    </div>
-    <span class="log-time">${timeAgo(data.timestamp)}</span>
-  `;
+  el.innerHTML = isTurn
+    ? `<div class="log-turn-narrative">
+         <span class="log-turn-label">DM</span>
+         <span class="log-turn-text">${data.message || ""}</span>
+         <span class="log-time">${timeAgo(data.timestamp)}</span>
+       </div>`
+    : `<span class="log-icon">${LOG_ICONS[data.type] || LOG_ICONS.default}</span>
+       <div class="log-content">
+         <span class="log-actor">${data.actor || "Unknown"}</span>
+         <span class="log-message">${data.message || ""}</span>
+       </div>
+       <span class="log-time">${timeAgo(data.timestamp)}</span>`;
   return el;
 }
 
@@ -980,7 +985,10 @@ function rerenderLocationFeed() {
   }
 
   const visible = Object.values(locationEntries)
-    .filter(e => locationCharIds.has(e.data.charId))
+    .filter(e => {
+      if (e.data.locationId) return e.data.locationId === myLocId;
+      return locationCharIds.has(e.data.charId);
+    })
     .sort((a, b) => {
       const ta = a.data.timestamp?.seconds ?? Number.MAX_SAFE_INTEGER;
       const tb = b.data.timestamp?.seconds ?? Number.MAX_SAFE_INTEGER;
@@ -1022,7 +1030,7 @@ function renderTurnBanner(turnData) {
   banner.innerHTML = `
     <span class="turn-banner-round">${icon} Round ${turnData.round}</span>
     <span class="turn-banner-sep">·</span>
-    <span class="turn-banner-desc">${turnData.description || ""}</span>
+    <span class="turn-banner-phase">${phase.charAt(0).toUpperCase() + phase.slice(1)}</span>
   `;
 }
 
