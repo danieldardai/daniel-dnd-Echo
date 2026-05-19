@@ -1,58 +1,70 @@
 import { db } from "./firebase-config.js";
 import {
-  doc,
-  onSnapshot,
-  updateDoc,
-  addDoc,
-  collection,
-  serverTimestamp
+  doc, onSnapshot, updateDoc, addDoc,
+  collection, serverTimestamp, orderBy, query, limit
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const params = new URLSearchParams(window.location.search);
 const charId = params.get("id");
 
-const loadingEl = document.getElementById("sheetLoading");
-const errorEl   = document.getElementById("sheetError");
-const mainEl    = document.getElementById("sheetMain");
+const loadingEl  = document.getElementById("sheetLoading");
+const errorEl    = document.getElementById("sheetError");
+const layoutEl   = document.getElementById("sheetLayout");
 
 if (!charId) showError();
 
-const headerClass  = document.getElementById("headerClass");
-const headerName   = document.getElementById("headerName");
-const headerPlayer = document.getElementById("headerPlayer");
-const sheetPortrait= document.getElementById("sheetPortrait");
-const identityMeta = document.getElementById("identityMeta");
+// Sidebar elements
+const sidebarName         = document.getElementById("sidebarName");
+const sidebarMeta         = document.getElementById("sidebarMeta");
+const sidebarPlayer       = document.getElementById("sidebarPlayer");
+const portraitImgWrap     = document.getElementById("portraitImgWrap");
+const portraitPlaceholder = document.getElementById("portraitPlaceholder");
+const portraitInput       = document.getElementById("portraitInput");
 
-const hpCurrentEl  = document.getElementById("hpCurrent");
-const hpMaxEl      = document.getElementById("hpMax");
-const hpTempLabel  = document.getElementById("hpTempLabel");
-const hpBarFill    = document.getElementById("hpBarFill");
-const hpAmountIn   = document.getElementById("hpAmount");
-const btnDamage    = document.getElementById("btnDamage");
-const btnHeal      = document.getElementById("btnHeal");
-const btnTemp      = document.getElementById("btnTemp");
+// HP elements
+const hpCurrentEl = document.getElementById("hpCurrent");
+const hpMaxEl     = document.getElementById("hpMax");
+const hpTempLabel = document.getElementById("hpTempLabel");
+const hpBarFill   = document.getElementById("hpBarFill");
+const hpAmountIn  = document.getElementById("hpAmount");
+const btnDamage   = document.getElementById("btnDamage");
+const btnHeal     = document.getElementById("btnHeal");
+const btnTemp     = document.getElementById("btnTemp");
 
-const dsSuccessPips= document.querySelectorAll("#dsSuccess .ds-pip");
-const dsFailPips   = document.querySelectorAll("#dsFailure .ds-pip");
-const btnResetDS   = document.getElementById("btnResetDS");
+// Actions tab columns
+const generalActionsCol = document.getElementById("generalActionsCol");
+const weaponsActionsCol = document.getElementById("weaponsActionsCol");
+const spellsActionsCol  = document.getElementById("spellsActionsCol");
 
-const condGrid     = document.getElementById("conditionsGrid");
-const slotsGrid    = document.getElementById("slotsGrid");
-const spellsGrid   = document.getElementById("spellsGrid");
-const invList      = document.getElementById("inventoryList");
-const statsGrid    = document.getElementById("statsGrid");
+// Conditions (stats tab)
+const condGrid = document.getElementById("conditionsGrid");
+
+// Inventory / stats / notes
+const consumablesList = document.getElementById("consumablesList");
+const equipmentList   = document.getElementById("equipmentList");
+const weightBarFill   = document.getElementById("weightBarFill");
+const weightValues    = document.getElementById("weightValues");
+const weightStatus    = document.getElementById("weightStatus");
 const notesArea    = document.getElementById("notesArea");
 const btnSaveNotes = document.getElementById("btnSaveNotes");
-const toastEl      = document.getElementById("toast");
+const takenCheckbox= document.getElementById("takenCheckbox");
+
+// Log feeds
+const globalLogFeed = document.getElementById("globalLogFeed");
+const localLogFeed  = document.getElementById("localLogFeed");
+
+const toastEl = document.getElementById("toast");
+
+// ---- Utility ----------------------------------------------------------------
 
 function showError() {
   loadingEl.classList.add("hidden");
   errorEl.classList.remove("hidden");
 }
 
-function showMain() {
+function showLayout() {
   loadingEl.classList.add("hidden");
-  mainEl.classList.remove("hidden");
+  layoutEl.classList.remove("hidden");
 }
 
 let toastTimer;
@@ -69,39 +81,94 @@ function hpColor(pct) {
   return "var(--hp-red)";
 }
 
-async function logEvent(type, actor, message) {
-  try {
-    await addDoc(collection(db, "sessionLog"), {
-      type, actor, message, timestamp: serverTimestamp()
-    });
-  } catch (e) { console.warn("Log write failed:", e); }
-}
+// ---- Firestore helpers ------------------------------------------------------
 
 const charRef = doc(db, "characters", charId);
 
 async function update(data, logType, logMsg, actorName) {
   try {
     await updateDoc(charRef, data);
-    if (logType && logMsg) await logEvent(logType, actorName, logMsg);
+    if (logType && logMsg) {
+      await addDoc(collection(db, "sessionLog"), {
+        type: logType, actor: actorName, message: logMsg,
+        charId, timestamp: serverTimestamp()
+      });
+    }
   } catch (e) {
-    toast("❌ Update failed — check console");
+    toast("❌ Update failed");
     console.error(e);
   }
 }
+
+// ---- Tab switching ----------------------------------------------------------
+
+const navTabs  = document.querySelectorAll(".nav-tab");
+const tabPanels = document.querySelectorAll(".tab-panel");
+
+navTabs.forEach(btn => {
+  btn.addEventListener("click", () => {
+    navTabs.forEach(t => t.classList.remove("active"));
+    tabPanels.forEach(p => p.classList.add("hidden"));
+    btn.classList.add("active");
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.remove("hidden");
+  });
+});
+
+// ---- Portrait upload (canvas resize → base64 → Firestore) ------------------
+
+portraitInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = async () => {
+      const MAX_W = 400, MAX_H = 600;
+      const scale  = Math.min(1, MAX_W / img.width, MAX_H / img.height);
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+
+      try {
+        await updateDoc(charRef, { portrait: dataUrl });
+        toast("Portrait updated");
+      } catch (err) {
+        toast("❌ Failed to save portrait");
+        console.error(err);
+      }
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// ---- Render functions -------------------------------------------------------
 
 let currentData = {};
 
 function renderIdentity(data) {
   document.title = `${data.name || "Hero"} — Echoes Beneath`;
-  headerName.textContent   = data.name || "Unknown Hero";
-  headerClass.textContent  = [data.race, data.class, data.level ? `Lvl ${data.level}` : ""].filter(Boolean).join(" · ");
-  headerPlayer.textContent = data.player ? `Played by ${data.player}` : "";
-  identityMeta.textContent = [data.race, data.class, data.level ? `Level ${data.level}` : ""].filter(Boolean).join(" · ");
+  sidebarName.textContent   = data.name || "Unknown Hero";
+  sidebarMeta.textContent   = [data.race, data.class, data.level ? `Lvl ${data.level}` : ""].filter(Boolean).join(" · ");
+  sidebarPlayer.textContent = data.player ? `Played by ${data.player}` : "";
 
+  const img = portraitImgWrap.querySelector("img");
   if (data.portrait) {
-    sheetPortrait.innerHTML = `<img src="${data.portrait}" alt="${data.name}" />`;
+    if (!img) {
+      portraitImgWrap.innerHTML = `<img src="${data.portrait}" alt="${data.name}" />`;
+    } else {
+      img.src = data.portrait;
+    }
+    if (portraitPlaceholder) portraitPlaceholder.style.display = "none";
   } else {
-    sheetPortrait.innerHTML = `<div class="portrait-emoji">${data.emoji || "⚔️"}</div>`;
+    if (img) img.remove();
+    if (portraitPlaceholder) {
+      portraitPlaceholder.style.display = "";
+      portraitPlaceholder.textContent = data.emoji || "⚔️";
+    }
   }
 }
 
@@ -110,17 +177,166 @@ function renderHP(data) {
   const max  = data.hpMax  ?? 0;
   const temp = data.hpTemp ?? 0;
   const pct  = max ? Math.min(100, Math.max(0, Math.round((cur / max) * 100))) : 0;
-  hpCurrentEl.textContent = cur;
-  hpMaxEl.textContent     = max;
-  hpBarFill.style.width   = `${pct}%`;
+  hpCurrentEl.textContent    = cur;
+  hpMaxEl.textContent        = max;
+  hpBarFill.style.width      = `${pct}%`;
   hpBarFill.style.background = hpColor(pct);
-  hpTempLabel.textContent = temp > 0 ? `+${temp} temp` : "";
+  hpTempLabel.textContent    = temp > 0 ? `+${temp} tmp` : "";
 }
 
-function renderDeathSaves(data) {
-  const ds = data.deathSaves || { successes:[false,false,false], failures:[false,false,false] };
-  dsSuccessPips.forEach((pip, i) => pip.classList.toggle("filled", !!(ds.successes?.[i])));
-  dsFailPips.forEach(   (pip, i) => pip.classList.toggle("filled", !!(ds.failures?.[i])));
+// ---- Actions tab: three columns -------------------------------------------
+
+const GENERAL_ACTIONS = [
+  { name: "Search",     icon: "🔍", desc: "Examine area for hidden things" },
+  { name: "Reveal",     icon: "👁️",  desc: "Expose a hidden creature or object" },
+  { name: "Heal",       icon: "💚", desc: "Spend a hit die to recover HP" },
+  { name: "Dash",       icon: "💨", desc: "Double movement this turn" },
+  { name: "Dodge",      icon: "🛡️",  desc: "Focus on avoiding attacks" },
+  { name: "Help",       icon: "🤝", desc: "Aid another creature's check" },
+  { name: "Hide",       icon: "👤", desc: "Attempt to become hidden" },
+  { name: "Ready",      icon: "⏳", desc: "Prepare a reaction trigger" },
+  { name: "Disengage",  icon: "🏃", desc: "Move without provoking attacks" },
+  { name: "Stabilize",  icon: "❤️", desc: "Stabilize a dying creature" },
+];
+
+function makeActionCard(icon, name, desc, onClick, disabled = false) {
+  const btn = document.createElement("button");
+  btn.className = "action-card" + (disabled ? " depleted" : "");
+  btn.disabled = disabled;
+  btn.innerHTML = `
+    <span class="action-card-icon">${icon}</span>
+    <div class="action-card-info">
+      <span class="action-card-name">${name}</span>
+      ${desc ? `<span class="action-card-desc">${desc}</span>` : ""}
+    </div>
+  `;
+  if (!disabled) btn.addEventListener("click", onClick);
+  return btn;
+}
+
+function renderGeneralActions() {
+  generalActionsCol.innerHTML = "";
+  GENERAL_ACTIONS.forEach(action => {
+    generalActionsCol.appendChild(makeActionCard(
+      action.icon, action.name, action.desc,
+      async () => {
+        await addDoc(collection(db, "sessionLog"), {
+          type: "action", actor: currentData.name,
+          message: `${currentData.name} used ${action.name}`,
+          charId, timestamp: serverTimestamp()
+        });
+        toast(`${action.icon} ${action.name}`);
+      }
+    ));
+  });
+}
+
+function renderWeaponActions(data) {
+  weaponsActionsCol.innerHTML = "";
+  const inv     = data.inventory || [];
+  const weapons = inv.filter(item => item.weapon === true || item.type === "weapon" || item.damage);
+
+  if (!weapons.length) {
+    weaponsActionsCol.innerHTML = `<p class="action-col-empty">No weapons found.<br>Add inventory items with a <code>damage</code> field or <code>weapon: true</code> in Firestore.</p>`;
+    return;
+  }
+
+  weapons.forEach(item => {
+    const meta = [item.damage, item.range ? `Range: ${item.range}` : null].filter(Boolean).join(" · ");
+    weaponsActionsCol.appendChild(makeActionCard(
+      item.emoji || "⚔️", item.name, meta,
+      async () => {
+        await addDoc(collection(db, "sessionLog"), {
+          type: "damage", actor: currentData.name,
+          message: `${currentData.name} attacked with ${item.name}${item.damage ? ` (${item.damage})` : ""}`,
+          charId, timestamp: serverTimestamp()
+        });
+        toast(`⚔️ ${item.name} attack!`);
+      }
+    ));
+  });
+}
+
+function renderSpellActions(data) {
+  spellsActionsCol.innerHTML = "";
+  const spells = data.spells    || [];
+  const slots  = data.spellSlots || {};
+
+  // Slot tracker at top
+  if (Object.keys(slots).length) {
+    const tracker = document.createElement("div");
+    tracker.className = "action-spell-slots";
+    tracker.innerHTML = `<p class="action-spell-slots-label">Spell Slots</p>`;
+    Object.entries(slots).forEach(([level, info]) => {
+      const row = document.createElement("div");
+      row.className = "action-slot-row";
+      const pips = Array.from({ length: info.total ?? 0 }, (_, i) =>
+        `<span class="action-slot-pip ${i < (info.used ?? 0) ? "used" : ""}"></span>`
+      ).join("");
+      row.innerHTML = `<span class="action-slot-label">${level}</span><div class="action-slot-pips">${pips}</div>`;
+      tracker.appendChild(row);
+    });
+    spellsActionsCol.appendChild(tracker);
+  }
+
+  if (!spells.length) {
+    const empty = document.createElement("p");
+    empty.className = "action-col-empty";
+    empty.textContent = "No spells available.";
+    spellsActionsCol.appendChild(empty);
+    return;
+  }
+
+  // Group by category field (attack / defense / general)
+  const groups = { attack: [], defense: [], general: [] };
+  spells.forEach(spell => {
+    const cat = spell.category || spell.type || "general";
+    (groups[cat] ?? groups.general).push(spell);
+  });
+
+  const GROUP_LABELS = { attack: "⚔️ Attack", defense: "🛡️ Defense", general: "✨ General" };
+  Object.entries(groups).forEach(([key, list]) => {
+    if (!list.length) return;
+    const header = document.createElement("p");
+    header.className = "action-spell-group-label";
+    header.textContent = GROUP_LABELS[key];
+    spellsActionsCol.appendChild(header);
+
+    list.forEach(spell => {
+      const slotLevel = spell.slotLevel || null;
+      const slotInfo  = slotLevel ? (slots[`Level ${slotLevel}`] ?? null) : null;
+      const noSlots   = !!(slotInfo && slotInfo.used >= slotInfo.total);
+      const meta      = [spell.level ? `Lvl ${spell.level}` : "Cantrip", spell.castingTime, spell.range].filter(Boolean).join(" · ");
+
+      spellsActionsCol.appendChild(makeActionCard(
+        "✨", spell.name, meta,
+        async () => {
+          if (slotLevel && slotInfo) {
+            if (slotInfo.used >= slotInfo.total) { toast("❌ No spell slots!"); return; }
+            await update(
+              { [`spellSlots.Level ${slotLevel}.used`]: (slotInfo.used ?? 0) + 1 },
+              "spell", `${currentData.name} cast ${spell.name} (expended Lvl ${slotLevel} slot)`,
+              currentData.name
+            );
+          } else {
+            await addDoc(collection(db, "sessionLog"), {
+              type: "spell", actor: currentData.name,
+              message: `${currentData.name} used ${spell.name}`,
+              charId, timestamp: serverTimestamp()
+            });
+          }
+          toast(`✨ ${spell.name} cast!`);
+        },
+        noSlots
+      ));
+    });
+  });
+}
+
+function renderActions(data) {
+  renderGeneralActions();
+  renderWeaponActions(data);
+  renderSpellActions(data);
 }
 
 function renderConditions(data) {
@@ -131,7 +347,6 @@ function renderConditions(data) {
   ];
   const saved = data.conditions || {};
   const all   = [...new Set([...DEFAULT_CONDITIONS, ...Object.keys(saved)])];
-
   condGrid.innerHTML = "";
   all.forEach(name => {
     const active = !!saved[name];
@@ -152,156 +367,240 @@ function renderConditions(data) {
   });
 }
 
-function renderSpellSlots(data) {
-  const slots = data.spellSlots;
-  if (!slots || !Object.keys(slots).length) {
-    document.getElementById("spellSlotsSection").classList.add("hidden");
-    return;
-  }
-  document.getElementById("spellSlotsSection").classList.remove("hidden");
-  slotsGrid.innerHTML = "";
 
-  Object.entries(slots).forEach(([level, info]) => {
-    const total = info.total ?? 0;
-    const used  = info.used  ?? 0;
-    const row   = document.createElement("div");
-    row.className = "slot-row";
-    row.innerHTML = `<span class="slot-row-label">${level}</span><div class="slot-pips"></div>`;
-    const pipsEl = row.querySelector(".slot-pips");
+// ---- Inventory helpers ------------------------------------------------------
 
-    for (let i = 0; i < total; i++) {
-      const pip = document.createElement("button");
-      pip.className = `slot-pip${i < used ? " used" : ""}`;
-      pip.title     = i < used ? "Expended — click to restore" : "Available — click to expend";
-      pip.addEventListener("click", async () => {
-        const curUsed = currentData.spellSlots?.[level]?.used ?? 0;
-        const isUsed  = i < curUsed;
-        const newUsed = isUsed ? Math.max(0, curUsed - 1) : Math.min(total, curUsed + 1);
-        await update(
-          { [`spellSlots.${level}.used`]: newUsed },
-          "slot",
-          `${currentData.name} ${isUsed ? "recovered" : "expended"} a ${level} slot`,
-          currentData.name
-        );
-        toast(isUsed ? `🔮 ${level} slot recovered` : `🔮 ${level} slot expended`);
+function isEquipment(item) {
+  return item.type === "weapon" || item.type === "armor" ||
+         item.type === "equipment" || item.weapon === true;
+}
+
+function calcCarryCapacity(data) {
+  const might     = data.stats?.Might     ?? 0;
+  const endurance = data.stats?.Endurance ?? 0;
+  return Math.round((25 + might * 2.5 + endurance * 1.5) * 10) / 10;
+}
+
+function calcCurrentWeight(inventory) {
+  return Math.round(
+    (inventory || []).reduce((sum, item) => {
+      const w = item.weight ?? 0;
+      const q = item.qty    ?? 1;
+      return sum + w * q;
+    }, 0) * 10
+  ) / 10;
+}
+
+function getEquipmentModifiers(inventory) {
+  const mods = {};
+  (inventory || []).forEach(item => {
+    if (item.equipped && item.statEffects) {
+      Object.entries(item.statEffects).forEach(([stat, val]) => {
+        mods[stat] = (mods[stat] ?? 0) + (val || 0);
       });
-      pipsEl.appendChild(pip);
     }
-    slotsGrid.appendChild(row);
   });
+  return mods;
 }
 
-function renderSpells(data) {
-  const spells = data.spells;
-  if (!spells || !spells.length) {
-    document.getElementById("spellsSection").classList.add("hidden");
-    return;
-  }
-  document.getElementById("spellsSection").classList.remove("hidden");
-  spellsGrid.innerHTML = "";
-
-  spells.forEach((spell) => {
-    const card      = document.createElement("div");
-    card.className  = "spell-card";
-    const slotLevel = spell.slotLevel || null;
-    const slots     = slotLevel ? (currentData.spellSlots?.[`Level ${slotLevel}`] ?? null) : null;
-    const noSlots   = slots && slots.used >= slots.total;
-
-    card.innerHTML = `
-      <div class="spell-name">${spell.name}</div>
-      <div class="spell-meta">
-        ${spell.school ? `<span>${spell.school}</span>` : ""}
-        ${spell.level  ? `· Lvl ${spell.level}` : "· Cantrip"}
-        ${spell.castingTime ? `· ${spell.castingTime}` : ""}
-        ${spell.range  ? `· ${spell.range}` : ""}
-      </div>
-      ${spell.notes ? `<div class="spell-meta" style="margin-top:0.25rem;font-style:italic;">${spell.notes}</div>` : ""}
-      <button class="spell-cast-btn" ${noSlots ? "disabled title='No slots remaining'" : ""}>${slotLevel ? "Cast" : "Use"}</button>
-    `;
-
-    card.querySelector(".spell-cast-btn").addEventListener("click", async () => {
-      if (slotLevel) {
-        const curSlots = currentData.spellSlots?.[`Level ${slotLevel}`];
-        if (curSlots) {
-          if (curSlots.used >= curSlots.total) { toast("❌ No spell slots remaining!"); return; }
-          await update(
-            { [`spellSlots.Level ${slotLevel}.used`]: (curSlots.used ?? 0) + 1 },
-            "spell",
-            `${currentData.name} cast ${spell.name} (expended Lvl ${slotLevel} slot)`,
-            currentData.name
-          );
-        }
-      } else {
-        await logEvent("spell", currentData.name, `${currentData.name} used ${spell.name}`);
-      }
-      toast(`✨ ${spell.name} cast!`);
-    });
-    spellsGrid.appendChild(card);
-  });
-}
+// ---- Render inventory -------------------------------------------------------
 
 function renderInventory(data) {
-  const inv = data.inventory;
-  if (!inv || !inv.length) {
-    document.getElementById("inventorySection").classList.add("hidden");
-    return;
-  }
-  document.getElementById("inventorySection").classList.remove("hidden");
-  invList.innerHTML = "";
+  const inv      = data.inventory || [];
+  const capacity = calcCarryCapacity(data);
+  const carried  = calcCurrentWeight(inv);
+  const pct      = Math.min(100, capacity > 0 ? (carried / capacity) * 100 : 0);
+  const over     = carried > capacity;
 
-  inv.forEach((item, idx) => {
-    const row          = document.createElement("div");
-    row.className      = "inventory-row";
-    const qty          = item.qty ?? 1;
-    const isConsumable = item.consumable !== false;
+  // Weight bar
+  weightBarFill.style.width      = `${pct}%`;
+  weightBarFill.style.background = over ? "var(--hp-red)" : pct > 75 ? "var(--hp-amber)" : "var(--hp-green)";
+  weightValues.textContent       = `${carried} / ${capacity} kg`;
+  weightStatus.textContent       = over ? "⚠ Encumbered" : "";
 
-    row.innerHTML = `
-      <span class="inv-name">${item.name}</span>
-      <span class="inv-qty">${qty > 1 ? `×${qty}` : ""}</span>
-      ${isConsumable
-        ? `<button class="inv-use-btn" ${qty <= 0 ? "disabled" : ""}>Use</button>`
-        : `<span style="font-size:0.65rem;color:var(--parchment-dim);font-style:italic;">equipped</span>`
-      }
-    `;
+  const consumables = inv.filter(item => !isEquipment(item));
+  const equipment   = inv.filter(item =>  isEquipment(item));
 
-    if (isConsumable) {
-      row.querySelector(".inv-use-btn").addEventListener("click", async () => {
+  // ---- Consumables column ----
+  consumablesList.innerHTML = "";
+  if (!consumables.length) {
+    consumablesList.innerHTML = `<p class="inv-empty">No consumables.</p>`;
+  } else {
+    consumables.forEach(item => {
+      const idx  = inv.indexOf(item);
+      const qty  = item.qty ?? 1;
+      const w    = item.weight ? `${(item.weight * qty).toFixed(2)} kg` : "";
+
+      const card = document.createElement("div");
+      card.className = "inv-card";
+      card.innerHTML = `
+        <div class="inv-card-header">
+          <span class="inv-card-icon">${item.emoji || "🧪"}</span>
+          <span class="inv-card-name">${item.name}</span>
+          <span class="inv-card-qty ${qty <= 2 ? "low" : ""}">×${qty}</span>
+        </div>
+        ${w ? `<div class="inv-card-meta"><span class="inv-card-weight">${w}</span></div>` : ""}
+        <div class="inv-card-actions">
+          <button class="inv-btn use-btn" ${qty <= 0 ? "disabled" : ""}>Use</button>
+        </div>
+      `;
+      card.querySelector(".use-btn").addEventListener("click", async () => {
         const curInv  = [...(currentData.inventory || [])];
-        const curItem = curInv[idx];
-        if (!curItem || (curItem.qty ?? 1) <= 0) { toast("❌ None left!"); return; }
-        const newQty  = (curItem.qty ?? 1) - 1;
-        curInv[idx]   = { ...curItem, qty: newQty };
+        const cur     = curInv[idx];
+        if (!cur || (cur.qty ?? 1) <= 0) { toast("❌ None left!"); return; }
+        const newQty  = (cur.qty ?? 1) - 1;
+        curInv[idx]   = { ...cur, qty: newQty };
         await update(
           { inventory: curInv },
           "inventory",
           `${currentData.name} used ${item.name}${newQty === 0 ? " (last one)" : ` (${newQty} left)`}`,
           currentData.name
         );
-        toast(`🎒 ${item.name} used${newQty === 0 ? " — none left!" : ""}`);
+        toast(`🧪 ${item.name} used${newQty === 0 ? " — none left!" : ""}`);
       });
-    }
-    invList.appendChild(row);
-  });
+      consumablesList.appendChild(card);
+    });
+  }
+
+  // ---- Equipment column ----
+  equipmentList.innerHTML = "";
+  if (!equipment.length) {
+    equipmentList.innerHTML = `<p class="inv-empty">No equipment.</p>`;
+  } else {
+    equipment.forEach(item => {
+      const idx      = inv.indexOf(item);
+      const equipped = !!item.equipped;
+      const effects  = item.statEffects ? Object.entries(item.statEffects) : [];
+      const wText    = item.weight ? `${item.weight} kg` : "";
+
+      const effectsHTML = effects.map(([stat, val]) => {
+        const cls = val > 0 ? "pos" : val < 0 ? "neg" : "neu";
+        return `<span class="inv-effect ${cls}">${stat} ${val > 0 ? "+" : ""}${val}</span>`;
+      }).join("");
+
+      const card = document.createElement("div");
+      card.className = `inv-card${equipped ? " equipped" : ""}`;
+      card.innerHTML = `
+        <div class="inv-card-header">
+          <span class="inv-card-icon">${item.emoji || (item.type === "armor" ? "🛡️" : "⚔️")}</span>
+          <span class="inv-card-name">${item.name}</span>
+        </div>
+        <div class="inv-card-meta">
+          ${wText ? `<span class="inv-card-weight">${wText}</span>` : ""}
+          ${item.damage ? `<span class="inv-card-damage">⚔ ${item.damage}</span>` : ""}
+          ${item.armor  ? `<span class="inv-card-damage">🛡 ${item.armor}</span>` : ""}
+        </div>
+        ${effectsHTML ? `<div class="inv-card-effects">${effectsHTML}</div>` : ""}
+        <div class="inv-card-actions">
+          <button class="inv-btn equip-btn ${equipped ? "equipped-btn" : ""}">
+            ${equipped ? "Unequip" : "Equip"}
+          </button>
+        </div>
+      `;
+      card.querySelector(".equip-btn").addEventListener("click", async () => {
+        const curInv = [...(currentData.inventory || [])];
+        curInv[idx]  = { ...curInv[idx], equipped: !equipped };
+        await update(
+          { inventory: curInv },
+          "inventory",
+          `${currentData.name} ${!equipped ? "equipped" : "unequipped"} ${item.name}`,
+          currentData.name
+        );
+        toast(`${!equipped ? "✅ Equipped" : "❌ Unequipped"}: ${item.name}`);
+      });
+      equipmentList.appendChild(card);
+    });
+  }
 }
 
+const STAT_CATEGORIES = [
+  { name: "BODY",      stats: ["Might", "Agility", "Endurance"] },
+  { name: "MIND",      stats: ["Knowledge", "Perception", "Ingenuity"] },
+  { name: "SPIRIT",    stats: ["Presence", "Will", "Empathy"] },
+  { name: "RESONANCE", stats: ["Resonance"] },
+];
+
 function renderStats(data) {
-  const stats = data.stats;
-  if (!stats || !Object.keys(stats).length) {
-    document.getElementById("statsSection").classList.add("hidden");
-    return;
-  }
-  document.getElementById("statsSection").classList.remove("hidden");
-  statsGrid.innerHTML = Object.entries(stats).map(([k, v]) => `
-    <div class="stat-cell">
-      <span class="stat-cell-label">${k}</span>
-      <span class="stat-cell-value">${v}</span>
-    </div>
-  `).join("");
+  const base    = data.stats         || {};
+  const spellMods = data.statModifiers || {};
+  const equipMods = getEquipmentModifiers(data.inventory || []);
+  const mods    = {};
+  [...new Set([...Object.keys(spellMods), ...Object.keys(equipMods)])].forEach(k => {
+    mods[k] = (spellMods[k] ?? 0) + (equipMods[k] ?? 0);
+  });
+  const container = document.getElementById("statCategories");
+  container.innerHTML = "";
+
+  STAT_CATEGORIES.forEach(cat => {
+    const group = document.createElement("div");
+    group.className = "stat-category";
+    group.innerHTML = `<h3 class="stat-category-title">${cat.name}</h3>`;
+
+    const grid = document.createElement("div");
+    grid.className = "stat-category-grid";
+
+    cat.stats.forEach(statName => {
+      const baseVal      = base[statName] ?? 0;
+      const modVal       = mods[statName] ?? 0;
+      const effectiveVal = baseVal + modVal;
+
+      const card = document.createElement("div");
+      card.className = "stat-card";
+
+      const modHTML = modVal !== 0
+        ? `<span class="stat-card-mod ${modVal > 0 ? "pos" : "neg"}">${modVal > 0 ? "+" : ""}${modVal}</span>`
+        : "";
+
+      card.innerHTML = `
+        <span class="stat-card-name">${statName}</span>
+        <span class="stat-card-effective">${effectiveVal}</span>
+        <div class="stat-card-base-row">
+          <span class="stat-card-base-label">base</span>
+          <button class="stat-card-base-val" data-stat="${statName}" data-val="${baseVal}">${baseVal}</button>
+          ${modHTML}
+        </div>
+      `;
+
+      card.querySelector(".stat-card-base-val").addEventListener("click", (e) => {
+        const btn = e.currentTarget;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.value = btn.dataset.val;
+        input.className = "stat-card-base-input";
+        btn.replaceWith(input);
+        input.focus();
+        input.select();
+
+        const save = async () => {
+          const newVal = parseInt(input.value, 10);
+          if (!isNaN(newVal)) {
+            await update({ [`stats.${statName}`]: newVal }, null, null, null);
+          }
+        };
+        input.addEventListener("blur", save);
+        input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter")  input.blur();
+          if (ev.key === "Escape") { input.value = btn.dataset.val; input.blur(); }
+        });
+      });
+
+      grid.appendChild(card);
+    });
+
+    group.appendChild(grid);
+    container.appendChild(group);
+  });
 }
 
 function renderNotes(data) {
   if (document.activeElement !== notesArea) notesArea.value = data.notes || "";
 }
+
+function renderTaken(data) {
+  takenCheckbox.checked = !!data.taken;
+}
+
+// ---- HP actions -------------------------------------------------------------
 
 function getAmount() {
   const val = parseInt(hpAmountIn.value, 10);
@@ -310,24 +609,23 @@ function getAmount() {
 }
 
 btnDamage.addEventListener("click", async () => {
-  const amt  = getAmount(); if (amt === null) return;
-  const data = currentData;
-  let hp     = data.hp    ?? 0;
-  let temp   = data.hpTemp ?? 0;
-  let dmg    = amt;
+  const amt = getAmount(); if (amt === null) return;
+  let hp   = currentData.hp    ?? 0;
+  let temp = currentData.hpTemp ?? 0;
+  let dmg  = amt;
   if (temp > 0) { const abs = Math.min(temp, dmg); temp -= abs; dmg -= abs; }
   hp = Math.max(0, hp - dmg);
-  await update({ hp, hpTemp: temp }, "damage", `${data.name} took ${amt} damage (HP: ${hp}/${data.hpMax ?? 0})`, data.name);
+  await update({ hp, hpTemp: temp }, "damage",
+    `${currentData.name} took ${amt} damage (HP: ${hp}/${currentData.hpMax ?? 0})`, currentData.name);
   hpAmountIn.value = "";
   toast(`⚔️ ${amt} damage taken`);
 });
 
 btnHeal.addEventListener("click", async () => {
-  const amt  = getAmount(); if (amt === null) return;
-  const data = currentData;
-  const max  = data.hpMax ?? 0;
-  const hp   = Math.min(max, (data.hp ?? 0) + amt);
-  await update({ hp }, "heal", `${data.name} healed ${amt} HP (now ${hp}/${max})`, data.name);
+  const amt = getAmount(); if (amt === null) return;
+  const max = currentData.hpMax ?? 0;
+  const hp  = Math.min(max, (currentData.hp ?? 0) + amt);
+  await update({ hp }, "heal", `${currentData.name} healed ${amt} HP (now ${hp}/${max})`, currentData.name);
   hpAmountIn.value = "";
   toast(`💚 Healed ${amt} HP`);
 });
@@ -335,41 +633,97 @@ btnHeal.addEventListener("click", async () => {
 btnTemp.addEventListener("click", async () => {
   const amt     = getAmount(); if (amt === null) return;
   const newTemp = Math.max(currentData.hpTemp ?? 0, amt);
-  await update({ hpTemp: newTemp }, "heal", `${currentData.name} gained ${amt} temporary HP`, currentData.name);
+  await update({ hpTemp: newTemp }, "heal",
+    `${currentData.name} gained ${amt} temporary HP`, currentData.name);
   hpAmountIn.value = "";
   toast(`🛡️ ${amt} temp HP granted`);
 });
 
-function dsClickHandler(type, index) {
-  return async () => {
-    const ds  = currentData.deathSaves || { successes:[false,false,false], failures:[false,false,false] };
-    const arr = [...(ds[type] || [false,false,false])];
-    arr[index] = !arr[index];
-    await update(
-      { [`deathSaves.${type}`]: arr },
-      "death",
-      `${currentData.name}: death save ${type.slice(0,-1)} ${arr[index] ? "marked" : "cleared"}`,
-      currentData.name
-    );
-    toast(`💀 Death save ${type.slice(0,-1)} ${arr[index] ? "marked" : "cleared"}`);
-  };
-}
 
-dsSuccessPips.forEach((pip, i) => pip.addEventListener("click", dsClickHandler("successes", i)));
-dsFailPips.forEach(   (pip, i) => pip.addEventListener("click", dsClickHandler("failures",  i)));
-
-btnResetDS.addEventListener("click", async () => {
-  await update(
-    { deathSaves: { successes:[false,false,false], failures:[false,false,false] } },
-    "death", `${currentData.name}'s death saves reset`, currentData.name
-  );
-  toast("💀 Death saves reset");
-});
+// ---- Notes & taken ----------------------------------------------------------
 
 btnSaveNotes.addEventListener("click", async () => {
-  await update({ notes: notesArea.value }, "note", null, null);
+  await update({ notes: notesArea.value }, null, null, null);
   toast("📜 Notes saved");
 });
+
+takenCheckbox.addEventListener("change", async () => {
+  await update({ taken: takenCheckbox.checked }, null, null, null);
+  toast(takenCheckbox.checked ? "⚔️ Character marked as taken" : "Character unmarked");
+});
+
+// ---- Campaign log (split: global + local) -----------------------------------
+
+const LOG_ICONS = {
+  damage:"⚔️", heal:"💚", spell:"✨", slot:"🔮",
+  condition:"🌀", inventory:"🎒", death:"💀", note:"📜", default:"📖"
+};
+
+function timeAgo(ts) {
+  if (!ts) return "";
+  const d   = ts.toDate ? ts.toDate() : new Date(ts);
+  const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (sec < 60)    return "just now";
+  if (sec < 3600)  return `${Math.floor(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+  return d.toLocaleDateString();
+}
+
+function buildLogEntry(id, data) {
+  const el = document.createElement("div");
+  el.className = "log-entry";
+  el.dataset.id = id;
+  el.innerHTML = `
+    <span class="log-icon">${LOG_ICONS[data.type] || LOG_ICONS.default}</span>
+    <div class="log-content">
+      <span class="log-actor">${data.actor || "Unknown"}</span>
+      <span class="log-message">${data.message || ""}</span>
+    </div>
+    <span class="log-time">${timeAgo(data.timestamp)}</span>
+  `;
+  return el;
+}
+
+const globalEntries = {};
+const localEntries  = {};
+
+function initLogs() {
+  const q = query(collection(db, "sessionLog"), orderBy("timestamp", "desc"), limit(80));
+
+  onSnapshot(q, (snapshot) => {
+    snapshot.docChanges().forEach((change) => {
+      const id   = change.doc.id;
+      const data = change.doc.data();
+
+      if (change.type === "added" || change.type === "modified") {
+        // Global feed
+        globalEntries[id]?.remove();
+        const gEl = buildLogEntry(id, data);
+        globalEntries[id] = gEl;
+        const gEmpty = globalLogFeed.querySelector(".log-empty");
+        if (gEmpty) gEmpty.remove();
+        globalLogFeed.insertBefore(gEl, globalLogFeed.firstChild);
+
+        // Local feed — only entries belonging to this character
+        if (data.charId === charId || data.actor === currentData.name) {
+          localEntries[id]?.remove();
+          const lEl = buildLogEntry(id, data);
+          localEntries[id] = lEl;
+          const lEmpty = localLogFeed.querySelector(".log-empty");
+          if (lEmpty) lEmpty.remove();
+          localLogFeed.insertBefore(lEl, localLogFeed.firstChild);
+        }
+      } else if (change.type === "removed") {
+        globalEntries[id]?.remove();
+        delete globalEntries[id];
+        localEntries[id]?.remove();
+        delete localEntries[id];
+      }
+    });
+  });
+}
+
+// ---- Main snapshot ----------------------------------------------------------
 
 let firstLoad = true;
 
@@ -377,16 +731,21 @@ onSnapshot(charRef, (snap) => {
   if (!snap.exists()) { showError(); return; }
   const data = snap.data();
   currentData = data;
-  if (firstLoad) { showMain(); firstLoad = false; }
+
+  if (firstLoad) {
+    showLayout();
+    firstLoad = false;
+    initLogs();
+  }
+
   renderIdentity(data);
   renderHP(data);
-  renderDeathSaves(data);
   renderConditions(data);
-  renderSpellSlots(data);
-  renderSpells(data);
+  renderActions(data);
   renderInventory(data);
   renderStats(data);
   renderNotes(data);
+  renderTaken(data);
 }, (err) => {
   showError();
   console.error("Sheet listener error:", err);

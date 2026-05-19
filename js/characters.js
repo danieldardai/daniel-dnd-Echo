@@ -55,6 +55,7 @@ function buildCard(id, data) {
       <div class="card-hp-bar-wrap" style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(0,0,0,0.3);">
         <div class="card-hp-bar" style="height:100%;width:${pct}%;background:${hpColor(pct)};transition:width 0.5s ease;"></div>
       </div>
+      ${data.taken ? `<span class="card-taken-badge" title="Character taken">⚔️</span>` : ""}
       <span class="card-emoji">${data.emoji || "⚔️"}</span>
       <h2 class="card-name">${data.name}</h2>
       <div class="card-hp-label">HP <strong>${cur}</strong> / ${max}</div>
@@ -83,6 +84,17 @@ function updateCard(id, data) {
   if (pip) {
     const link = card.querySelector(".card-link");
     link.insertAdjacentHTML("beforeend", pip);
+  }
+
+  const existingBadge = card.querySelector(".card-taken-badge");
+  if (data.taken && !existingBadge) {
+    const badge = document.createElement("span");
+    badge.className = "card-taken-badge";
+    badge.title = "Character taken";
+    badge.textContent = "⚔️";
+    card.querySelector(".card-link").prepend(badge);
+  } else if (!data.taken && existingBadge) {
+    existingBadge.remove();
   }
 }
 

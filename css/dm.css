@@ -1,0 +1,583 @@
+/* ── DM Float Button ─────────────────────────────────────── */
+.dm-float-btn {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 900;
+  background: linear-gradient(135deg, #5a1010, #8b0000);
+  color: #e8d5b7;
+  border: 1px solid #c0392b;
+  border-radius: 50px;
+  padding: 0.6rem 1.2rem;
+  font-family: 'Cinzel', serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(192,57,43,0.5), 0 4px 12px rgba(0,0,0,0.6);
+  transition: box-shadow 0.2s, transform 0.1s;
+}
+.dm-float-btn:hover {
+  box-shadow: 0 0 28px rgba(192,57,43,0.8), 0 4px 12px rgba(0,0,0,0.7);
+  transform: translateY(-1px);
+}
+.dm-float-btn:active { transform: translateY(0); }
+
+/* ── Password Modal ──────────────────────────────────────── */
+.dm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dm-modal-backdrop.hidden { display: none; }
+
+.dm-modal {
+  background: linear-gradient(160deg, #0d0d12 0%, #120608 100%);
+  border: 1px solid #5a1010;
+  border-radius: 8px;
+  padding: 2rem;
+  width: 320px;
+  box-shadow: 0 0 40px rgba(192,57,43,0.3), 0 8px 32px rgba(0,0,0,0.8);
+  text-align: center;
+}
+.dm-modal h3 {
+  font-family: 'Cinzel Decorative', serif;
+  color: #c0392b;
+  margin: 0 0 0.4rem;
+  font-size: 1.1rem;
+}
+.dm-modal p {
+  color: #9a8a7a;
+  margin: 0 0 1rem;
+  font-family: 'Crimson Pro', serif;
+  font-size: 1rem;
+}
+.dm-modal-error {
+  color: #c0392b;
+  font-family: 'Crimson Pro', serif;
+  margin: 0.4rem 0;
+  font-size: 0.9rem;
+}
+.dm-modal-error.hidden { display: none; }
+.dm-modal-btns {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+.dm-modal-btns button {
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  padding: 0.5rem 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #5a1010;
+  transition: background 0.15s;
+}
+.dm-modal-btns button:first-child {
+  background: transparent;
+  color: #9a8a7a;
+}
+.dm-modal-btns button:first-child:hover { background: rgba(255,255,255,0.05); }
+.dm-modal-btns button:last-child {
+  background: linear-gradient(135deg, #5a1010, #8b0000);
+  color: #e8d5b7;
+}
+.dm-modal-btns button:last-child:hover { background: linear-gradient(135deg, #7a1515, #a00000); }
+
+/* ── DM Overlay ──────────────────────────────────────────── */
+.dm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 1rem;
+}
+.dm-overlay.hidden { display: none; }
+
+.dm-panel {
+  background: linear-gradient(160deg, #0a0a0f 0%, #100508 100%);
+  border: 1px solid #3a0808;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1100px;
+  box-shadow: 0 0 60px rgba(192,57,43,0.2), 0 16px 48px rgba(0,0,0,0.9);
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.dm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 1.2rem;
+  background: linear-gradient(90deg, #0d0d12, #1a0505);
+  border-bottom: 1px solid #3a0808;
+  flex-shrink: 0;
+}
+.dm-title {
+  font-family: 'Cinzel Decorative', serif;
+  color: #c0392b;
+  font-size: 1rem;
+  margin: 0;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 12px rgba(192,57,43,0.5);
+}
+.dm-close-btn {
+  background: transparent;
+  border: 1px solid #5a1010;
+  color: #9a8a7a;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.15s;
+}
+.dm-close-btn:hover { background: rgba(192,57,43,0.2); color: #e8d5b7; }
+
+/* ── Body ────────────────────────────────────────────────── */
+.dm-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Character Sidebar ───────────────────────────────────── */
+.dm-sidebar {
+  width: 180px;
+  flex-shrink: 0;
+  border-right: 1px solid #3a0808;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dm-sidebar-title {
+  font-family: 'Cinzel', serif;
+  color: #9a8a7a;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.7rem 0.8rem 0.4rem;
+  border-bottom: 1px solid #2a0505;
+  margin: 0;
+  flex-shrink: 0;
+}
+.dm-char-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.3rem 0;
+}
+.dm-char-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.5rem 0.8rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(58,8,8,0.4);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.dm-char-btn:hover { background: rgba(192,57,43,0.1); }
+.dm-char-btn.active { background: rgba(192,57,43,0.18); border-left: 2px solid #c0392b; }
+.dm-char-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.78rem;
+  color: #e8d5b7;
+}
+.dm-char-hp {
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.8rem;
+  color: #6b9c6b;
+}
+.dm-char-hp.mid { color: #c8a840; }
+.dm-char-hp.low { color: #c0392b; }
+
+/* ── Main Area ───────────────────────────────────────────── */
+.dm-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Tabs ────────────────────────────────────────────────── */
+.dm-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #3a0808;
+  flex-shrink: 0;
+  background: #080808;
+}
+.dm-tab-btn {
+  background: transparent;
+  border: none;
+  border-right: 1px solid #2a0505;
+  color: #7a6a5a;
+  font-family: 'Cinzel', serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.dm-tab-btn:hover { color: #e8d5b7; background: rgba(255,255,255,0.03); }
+.dm-tab-btn.active {
+  color: #c0392b;
+  background: rgba(192,57,43,0.1);
+  border-bottom: 2px solid #c0392b;
+}
+
+.dm-tab-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+.dm-tab-panel {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+}
+.dm-tab-panel.hidden { display: none; }
+
+/* ── Common Components ───────────────────────────────────── */
+.dm-no-char {
+  color: #5a4a3a;
+  font-family: 'Crimson Pro', serif;
+  font-size: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.dm-section {
+  margin-bottom: 1.4rem;
+}
+.dm-section-title {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8a6a4a;
+  border-bottom: 1px solid #2a0505;
+  padding-bottom: 0.3rem;
+  margin: 0 0 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dm-input {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid #3a0808;
+  border-radius: 4px;
+  color: #e8d5b7;
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.6rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.dm-input:focus { border-color: #8b2020; }
+.dm-input::placeholder { color: #5a4a3a; }
+
+.dm-btn {
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  padding: 0.35rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid;
+  transition: all 0.15s;
+}
+.dm-btn-sm { padding: 0.2rem 0.5rem; font-size: 0.68rem; }
+.dm-btn-damage { background: rgba(192,57,43,0.2); border-color: #c0392b; color: #e8d5b7; }
+.dm-btn-damage:hover { background: rgba(192,57,43,0.4); }
+.dm-btn-heal { background: rgba(46,204,113,0.15); border-color: #2ecc71; color: #e8d5b7; }
+.dm-btn-heal:hover { background: rgba(46,204,113,0.3); }
+.dm-btn-neutral { background: rgba(255,255,255,0.06); border-color: #5a4a3a; color: #c8b89a; }
+.dm-btn-neutral:hover { background: rgba(255,255,255,0.1); }
+
+/* ── Combat: HP ──────────────────────────────────────────── */
+.dm-hp-display {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+.dm-hp-cur {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 2.2rem;
+  color: #e8d5b7;
+}
+.dm-hp-sep { color: #5a4a3a; font-size: 1.5rem; }
+.dm-hp-max { font-family: 'Cinzel', serif; font-size: 1.4rem; color: #9a8a7a; }
+.dm-hp-label { font-family: 'Cinzel', serif; font-size: 0.75rem; color: #6a5a4a; letter-spacing: 0.1em; margin-left: 0.3rem; }
+
+.dm-hp-bar-track {
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  margin-bottom: 0.8rem;
+  overflow: hidden;
+}
+.dm-hp-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.dm-hp-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.dm-hp-actions .dm-input { width: 80px; }
+
+/* ── Conditions ──────────────────────────────────────────── */
+.dm-conditions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.dm-cond-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid #2a0505;
+  border-radius: 20px;
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.85rem;
+  color: #7a6a5a;
+  transition: all 0.15s;
+}
+.dm-cond-label input { display: none; }
+.dm-cond-label.active {
+  background: rgba(192,57,43,0.2);
+  border-color: #c0392b;
+  color: #e8d5b7;
+}
+.dm-cond-label:hover { border-color: #8b2020; color: #c8b89a; }
+
+/* ── Death Saves ─────────────────────────────────────────── */
+.dm-death-saves { display: flex; flex-direction: column; gap: 0.5rem; }
+.dm-saves-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.dm-saves-label {
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.85rem;
+  color: #9a8a7a;
+  width: 70px;
+}
+.dm-save-check {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #2ecc71;
+}
+.dm-save-check.failure { accent-color: #c0392b; }
+
+/* ── Stats Tab ───────────────────────────────────────────── */
+.dm-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.4rem;
+}
+.dm-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid #2a0505;
+  border-radius: 4px;
+  padding: 0.35rem 0.6rem;
+}
+.dm-stat-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  color: #9a8a7a;
+  flex: 1;
+  letter-spacing: 0.04em;
+}
+.dm-stat-val {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 1rem;
+  color: #e8d5b7;
+  min-width: 1.8rem;
+  text-align: center;
+}
+.dm-stat-val.pos { color: #2ecc71; }
+.dm-stat-val.neg { color: #c0392b; }
+.dm-stat-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid #3a0808;
+  border-radius: 3px;
+  color: #c8b89a;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: background 0.15s;
+}
+.dm-stat-btn:hover { background: rgba(192,57,43,0.2); }
+
+/* ── Inventory Tab ───────────────────────────────────────── */
+.dm-inv-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.dm-inv-col { display: flex; flex-direction: column; gap: 0.5rem; }
+.dm-inv-list { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.dm-inv-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid #2a0505;
+  border-radius: 4px;
+  padding: 0.35rem 0.6rem;
+  flex-wrap: wrap;
+}
+.dm-inv-item.equipped { border-color: #5a1010; background: rgba(192,57,43,0.06); }
+.dm-inv-emoji { font-size: 1rem; }
+.dm-inv-name {
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.9rem;
+  color: #e8d5b7;
+  flex: 1;
+  min-width: 80px;
+}
+.dm-inv-qty {
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  color: #9a8a7a;
+}
+.dm-inv-type {
+  font-family: 'Cinzel', serif;
+  font-size: 0.65rem;
+  color: #6a5a4a;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dm-btn-del {
+  background: transparent;
+  border: 1px solid #5a1010;
+  border-radius: 3px;
+  color: #c0392b;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.3rem;
+  transition: background 0.15s;
+}
+.dm-btn-del:hover { background: rgba(192,57,43,0.2); }
+.dm-empty {
+  color: #4a3a2a;
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.85rem;
+  padding: 0.5rem;
+}
+
+.dm-add-form {
+  border: 1px solid #2a0505;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.dm-add-form summary {
+  padding: 0.4rem 0.7rem;
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: #8a6a4a;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(255,255,255,0.02);
+  transition: background 0.15s;
+}
+.dm-add-form summary:hover { background: rgba(255,255,255,0.04); }
+.dm-add-form[open] summary { border-bottom: 1px solid #2a0505; }
+.dm-form-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.7rem;
+  background: rgba(0,0,0,0.2);
+  align-items: center;
+}
+.dm-form-fields .dm-input { flex: 1; min-width: 90px; }
+
+.dm-effects-grid {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.dm-effects-label {
+  width: 100%;
+  font-family: 'Cinzel', serif;
+  font-size: 0.65rem;
+  color: #6a5a4a;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dm-effect-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.75rem;
+  color: #9a8a7a;
+}
+.dm-effect-input { width: 50px !important; text-align: center; min-width: unset !important; }
+
+/* ── Log Tab ─────────────────────────────────────────────── */
+.dm-notes-area {
+  width: 100%;
+  min-height: 160px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid #3a0808;
+  border-radius: 4px;
+  color: #e8d5b7;
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.95rem;
+  padding: 0.6rem 0.8rem;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+.dm-notes-area:focus { border-color: #8b2020; }
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+.dm-tab-panel::-webkit-scrollbar,
+.dm-char-list::-webkit-scrollbar { width: 5px; }
+.dm-tab-panel::-webkit-scrollbar-track,
+.dm-char-list::-webkit-scrollbar-track { background: transparent; }
+.dm-tab-panel::-webkit-scrollbar-thumb,
+.dm-char-list::-webkit-scrollbar-thumb { background: #3a0808; border-radius: 3px; }

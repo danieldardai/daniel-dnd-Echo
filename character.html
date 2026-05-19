@@ -15,118 +15,188 @@
   <div class="stars"></div>
   <div class="stars stars-2"></div>
 
-  <header class="sheet-header">
-    <a href="index.html" class="back-link">← All Heroes</a>
-    <div class="sheet-header-name">
-      <p class="sheet-header-class" id="headerClass"></p>
-      <h1 class="sheet-header-title" id="headerName">Loading…</h1>
-    </div>
-    <div class="sheet-header-player" id="headerPlayer"></div>
-  </header>
-
+  <!-- Overlays shown before load -->
   <div class="sheet-loading" id="sheetLoading">
     <div class="loading-orb"></div>
     <p>Summoning the hero…</p>
   </div>
-
   <div class="sheet-error hidden" id="sheetError">
     <p>✦ Hero not found.</p>
     <a href="index.html">← Return</a>
   </div>
 
-  <main class="sheet-main hidden" id="sheetMain">
+  <!-- Full layout (hidden until loaded) -->
+  <div class="sheet-layout hidden" id="sheetLayout">
 
-    <!-- Portrait + identity -->
-    <section class="sheet-identity">
-      <div class="sheet-portrait-wrap" id="sheetPortrait"></div>
-      <div class="sheet-identity-info">
-        <p class="identity-meta" id="identityMeta"></p>
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sheet-sidebar">
 
-        <!-- HP -->
-        <div class="hp-block">
-          <div class="hp-numbers">
-            <span class="hp-current" id="hpCurrent">—</span>
-            <span class="hp-sep">/</span>
-            <span class="hp-max" id="hpMax">—</span>
-            <span class="hp-label">HP</span>
-            <span class="hp-temp-label" id="hpTempLabel"></span>
-          </div>
-          <div class="hp-bar-track">
-            <div class="hp-bar-fill" id="hpBarFill"></div>
-          </div>
+      <a href="index.html" class="back-link">← All Heroes</a>
 
-          <div class="hp-actions">
-            <div class="hp-input-row">
-              <input type="number" id="hpAmount" min="1" max="999" placeholder="Amount" aria-label="HP amount" />
-              <button class="action-btn btn-damage"  id="btnDamage">Damage</button>
-              <button class="action-btn btn-heal"    id="btnHeal">Heal</button>
-              <button class="action-btn btn-temp"    id="btnTemp">Temp HP</button>
-            </div>
+      <!-- Portrait upload -->
+      <div class="sidebar-portrait">
+        <label class="portrait-upload-label" for="portraitInput" title="Click to change portrait">
+          <div class="portrait-img-wrap" id="portraitImgWrap">
+            <span class="portrait-placeholder-icon" id="portraitPlaceholder">⚔️</span>
           </div>
+          <span class="portrait-upload-hint">Click to upload</span>
+        </label>
+        <input type="file" id="portraitInput" accept="image/*" />
+      </div>
+
+      <!-- Identity -->
+      <div class="sidebar-identity">
+        <h1 class="sidebar-name" id="sidebarName">…</h1>
+        <p class="sidebar-meta" id="sidebarMeta"></p>
+        <p class="sidebar-player" id="sidebarPlayer"></p>
+      </div>
+
+      <!-- HP block -->
+      <div class="sidebar-hp">
+        <div class="hp-numbers">
+          <span class="hp-current" id="hpCurrent">—</span>
+          <span class="hp-sep">/</span>
+          <span class="hp-max" id="hpMax">—</span>
+          <span class="hp-label">HP</span>
+          <span class="hp-temp-label" id="hpTempLabel"></span>
         </div>
-
-        <!-- Death Saves -->
-        <div class="death-saves" id="deathSavesBlock">
-          <p class="ds-label">Death Saves</p>
-          <div class="ds-row">
-            <span class="ds-text">Successes</span>
-            <div class="ds-pips" id="dsSuccess">
-              <button class="ds-pip" data-index="0" data-type="successes" aria-label="Success 1"></button>
-              <button class="ds-pip" data-index="1" data-type="successes" aria-label="Success 2"></button>
-              <button class="ds-pip" data-index="2" data-type="successes" aria-label="Success 3"></button>
-            </div>
-          </div>
-          <div class="ds-row">
-            <span class="ds-text">Failures</span>
-            <div class="ds-pips" id="dsFailure">
-              <button class="ds-pip ds-pip-fail" data-index="0" data-type="failures" aria-label="Failure 1"></button>
-              <button class="ds-pip ds-pip-fail" data-index="1" data-type="failures" aria-label="Failure 2"></button>
-              <button class="ds-pip ds-pip-fail" data-index="2" data-type="failures" aria-label="Failure 3"></button>
-            </div>
-          </div>
-          <button class="reset-ds-btn" id="btnResetDS">Reset</button>
+        <div class="hp-bar-track">
+          <div class="hp-bar-fill" id="hpBarFill"></div>
+        </div>
+        <div class="hp-input-row">
+          <input type="number" id="hpAmount" min="1" max="999" placeholder="Amt" aria-label="HP amount" />
+          <button class="action-btn btn-damage" id="btnDamage">Dmg</button>
+          <button class="action-btn btn-heal"   id="btnHeal">Heal</button>
+          <button class="action-btn btn-temp"   id="btnTemp">Tmp</button>
         </div>
       </div>
-    </section>
 
-    <!-- Conditions -->
-    <section class="sheet-section">
-      <h2 class="sheet-section-title">Conditions</h2>
-      <div class="conditions-grid" id="conditionsGrid"></div>
-    </section>
+      <!-- Taken toggle -->
+      <label class="taken-toggle">
+        <input type="checkbox" id="takenCheckbox" />
+        <span class="taken-toggle-box"></span>
+        <span class="taken-toggle-label">Character Taken</span>
+      </label>
 
-    <!-- Spell Slots -->
-    <section class="sheet-section" id="spellSlotsSection">
-      <h2 class="sheet-section-title">Spell Slots</h2>
-      <div class="slots-grid" id="slotsGrid"></div>
-    </section>
+      <!-- Tab navigation -->
+      <nav class="sidebar-nav">
+        <button class="nav-tab active" data-tab="log">📜 Campaign Log</button>
+        <button class="nav-tab" data-tab="stats">📊 Stats</button>
+        <button class="nav-tab" data-tab="actions">⚔️ Actions</button>
+        <button class="nav-tab" data-tab="inventory">🎒 Inventory</button>
+        <button class="nav-tab" data-tab="notes">📝 Notes</button>
+      </nav>
 
-    <!-- Spells -->
-    <section class="sheet-section" id="spellsSection">
-      <h2 class="sheet-section-title">Spells</h2>
-      <div class="spells-grid" id="spellsGrid"></div>
-    </section>
+    </aside>
 
-    <!-- Inventory -->
-    <section class="sheet-section" id="inventorySection">
-      <h2 class="sheet-section-title">Inventory</h2>
-      <div class="inventory-list" id="inventoryList"></div>
-    </section>
+    <!-- ===== MAIN CONTENT ===== -->
+    <main class="sheet-main">
 
-    <!-- Stats -->
-    <section class="sheet-section" id="statsSection">
-      <h2 class="sheet-section-title">Stats</h2>
-      <div class="stats-grid" id="statsGrid"></div>
-    </section>
+      <!-- Tab: Campaign Log -->
+      <div class="tab-panel" id="tab-log">
+        <div class="log-split">
+          <div class="log-col">
+            <h2 class="log-col-title">Character Log</h2>
+            <div class="log-feed" id="localLogFeed">
+              <div class="log-empty">No events for this character yet…</div>
+            </div>
+          </div>
+          <div class="log-col">
+            <h2 class="log-col-title">Global Log <span class="live-badge">⬤ Live</span></h2>
+            <div class="log-feed" id="globalLogFeed">
+              <div class="log-empty">No events yet…</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-    <!-- Notes -->
-    <section class="sheet-section">
-      <h2 class="sheet-section-title">Notes</h2>
-      <textarea class="notes-area" id="notesArea" placeholder="Session notes, reminders, lore…" rows="5"></textarea>
-      <button class="action-btn btn-save-notes" id="btnSaveNotes">Save Notes</button>
-    </section>
+      <!-- Tab: Stats -->
+      <div class="tab-panel hidden" id="tab-stats">
+        <!-- Fixed top row: 4 stat categories -->
+        <div class="stat-categories" id="statCategories"></div>
+        <!-- Scrollable lower area -->
+        <div class="tab-scroll-inner">
+          <section class="sheet-section">
+            <h2 class="sheet-section-title">Conditions</h2>
+            <div class="conditions-grid" id="conditionsGrid"></div>
+          </section>
+          <div class="placeholder-banner">
+            <span class="placeholder-icon">📊</span>
+            <div>
+              <p class="placeholder-title">More Stats Coming</p>
+              <p class="placeholder-body">Derived stats, skills, saving throws and resistances will appear here.</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
-  </main>
+      <!-- Tab: Actions -->
+      <div class="tab-panel hidden" id="tab-actions">
+        <div class="actions-layout">
+
+          <!-- Column 1: General Actions -->
+          <div class="action-col">
+            <h2 class="action-col-title">General Actions</h2>
+            <div class="action-col-body" id="generalActionsCol"></div>
+          </div>
+
+          <!-- Column 2: Weapon Attacks -->
+          <div class="action-col">
+            <h2 class="action-col-title">Weapons</h2>
+            <div class="action-col-body" id="weaponsActionsCol"></div>
+          </div>
+
+          <!-- Column 3: Spells -->
+          <div class="action-col">
+            <h2 class="action-col-title">Spells</h2>
+            <div class="action-col-body" id="spellsActionsCol"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Tab: Inventory -->
+      <div class="tab-panel hidden" id="tab-inventory">
+
+        <!-- Weight bar -->
+        <div class="inventory-header">
+          <span class="weight-label">Carrying</span>
+          <div class="weight-bar-track">
+            <div class="weight-bar-fill" id="weightBarFill"></div>
+          </div>
+          <span class="weight-values" id="weightValues">0 / 25 kg</span>
+          <span class="weight-status" id="weightStatus"></span>
+        </div>
+
+        <!-- Two columns -->
+        <div class="inventory-layout">
+
+          <div class="inventory-col">
+            <h2 class="inventory-col-title">🧪 Consumables</h2>
+            <div class="inventory-col-body" id="consumablesList"></div>
+          </div>
+
+          <div class="inventory-col">
+            <h2 class="inventory-col-title">⚔️ Equipment</h2>
+            <div class="inventory-col-body" id="equipmentList"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Tab: Notes -->
+      <div class="tab-panel hidden" id="tab-notes">
+        <div class="tab-scroll-inner">
+          <section class="sheet-section">
+            <h2 class="sheet-section-title">Notes</h2>
+            <textarea class="notes-area" id="notesArea" placeholder="Session notes, reminders, lore…"></textarea>
+            <button class="action-btn btn-save-notes" id="btnSaveNotes">Save Notes</button>
+          </section>
+        </div>
+      </div>
+
+    </main>
+  </div>
 
   <!-- Toast -->
   <div class="toast hidden" id="toast"></div>

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Echoes Beneath</title>
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/dm.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cinzel:wght@400;600&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet" />
@@ -81,9 +82,71 @@
     </div>
   </div>
 
+  <!-- DM Float Button -->
+  <button class="dm-float-btn" id="dmBtn">⚔ DM</button>
+
+  <!-- DM Password Modal -->
+  <div class="dm-modal-backdrop hidden" id="dmPasswordModal">
+    <div class="dm-modal">
+      <h3>DM Access</h3>
+      <p>Enter the dungeon master password</p>
+      <input type="password" class="dm-input" id="dmPasswordInput" placeholder="Password" />
+      <div class="dm-modal-error hidden" id="dmPasswordError">Wrong password. Try again.</div>
+      <div class="dm-modal-btns">
+        <button id="dmPasswordCancel">Cancel</button>
+        <button id="dmPasswordSubmit">Enter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DM Overlay Panel -->
+  <div class="dm-overlay hidden" id="dmOverlay">
+    <div class="dm-panel">
+
+      <div class="dm-header">
+        <h2 class="dm-title">⚔ DM Control Panel</h2>
+        <button class="dm-close-btn" id="dmCloseBtn">✕</button>
+      </div>
+
+      <div class="dm-body">
+        <!-- Character list sidebar -->
+        <div class="dm-sidebar">
+          <h3 class="dm-sidebar-title">Characters</h3>
+          <div class="dm-char-list" id="dmCharList"></div>
+        </div>
+
+        <!-- Main tab area -->
+        <div class="dm-main">
+          <div class="dm-tabs">
+            <button class="dm-tab-btn active" data-tab="combat">⚔️ Combat</button>
+            <button class="dm-tab-btn" data-tab="inventory">🎒 Inventory</button>
+            <button class="dm-tab-btn" data-tab="stats">📊 Stats</button>
+            <button class="dm-tab-btn" data-tab="log">📜 Log</button>
+          </div>
+          <div class="dm-tab-content">
+            <div class="dm-tab-panel" id="dm-tab-combat">
+              <div class="dm-no-char">Select a character from the list.</div>
+            </div>
+            <div class="dm-tab-panel hidden" id="dm-tab-inventory">
+              <div class="dm-no-char">Select a character from the list.</div>
+            </div>
+            <div class="dm-tab-panel hidden" id="dm-tab-stats">
+              <div class="dm-no-char">Select a character from the list.</div>
+            </div>
+            <div class="dm-tab-panel hidden" id="dm-tab-log">
+              <div class="dm-no-char">Select a character from the list.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <script type="module" src="js/firebase-config.js"></script>
   <script type="module" src="js/characters.js"></script>
   <script type="module" src="js/session-log.js"></script>
+  <script type="module" src="js/dm.js"></script>
   <script src="js/ui.js"></script>
 </body>
 </html>
