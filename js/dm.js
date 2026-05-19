@@ -361,6 +361,7 @@ function renderTurnStrip() {
         type: "turn", actor: "DM",
         message: `${PHASE_ICONS[phase]} [${locName}] Round 1 begins — ${desc}`,
         timestamp: serverTimestamp(), charId: null,
+        locationId: turnDocId !== "__global__" ? turnDocId : null,
       });
     });
 
@@ -425,6 +426,7 @@ function renderTurnStrip() {
         type: "turn", actor: "DM",
         message: `${icon} [${locName}] Round ${newRound} — ${newDesc}`,
         timestamp: serverTimestamp(), charId: null,
+        locationId: turnDocId !== "__global__" ? turnDocId : null,
       });
     });
     strip.querySelector("#dmBtnEditDesc").addEventListener("click", () => {
@@ -456,6 +458,7 @@ function renderTurnStrip() {
         type: "turn", actor: "DM",
         message: `✕ [${locName}] Turn ended after Round ${round}`,
         timestamp: serverTimestamp(), charId: null,
+        locationId: turnDocId !== "__global__" ? turnDocId : null,
       });
     });
   }

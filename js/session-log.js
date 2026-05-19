@@ -57,6 +57,8 @@ let allEntries    = {};   // entryId → { el, data }
 
 function isVisible(data) {
   if (selectedLocId === "all") return true;
+  // Turn/DM entries carry locationId directly
+  if (data.locationId) return data.locationId === selectedLocId;
   if (!data.charId) return false;
   return charToLocId[data.charId] === selectedLocId;
 }
