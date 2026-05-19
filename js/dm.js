@@ -192,10 +192,10 @@ async function callClaude(text, phase) {
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 300,
+      max_tokens: 500,
       messages: [{
         role: "user",
-        content: `You are a narrative assistant for "Echoes Beneath," a dark fantasy tabletop RPG. The Dungeon Master wrote this description for ${phaseContext}:\n\n"${text}"\n\nRewrite it: fix typos, add atmospheric dark fantasy flair, improve clarity. Keep it 1-3 sentences. Return ONLY the improved text, no commentary.`,
+        content: `You are a narrative assistant for "Echoes Beneath," a dark fantasy tabletop RPG. The Dungeon Master wrote this description for ${phaseContext}:\n\n"${text}"\n\nThe input may be in English or Hungarian. Enhance it: fix typos, add atmospheric dark fantasy flair, improve clarity. Then provide both language versions.\n\nRespond in exactly this format (no extra commentary):\n🇬🇧 [enhanced English version, 1-3 sentences]\n🇭🇺 [enhanced Hungarian version, 1-3 sentences]`,
       }],
     }),
   });
