@@ -201,7 +201,7 @@ const DICE_TYPES = [4, 6, 8, 10, 12, 20, 100];
 let diceState = { type: 20, qty: 1, bonus: 0, context: null };
 
 function parseDamage(str) {
-  const m = /(\d+)d(\d+)([+-]\d+)?/.exec(str || "");
+  const m = /(\d+)d(\d+)([+-]\d+)?/i.exec(str || "");
   if (!m) return null;
   return { qty: parseInt(m[1]) || 1, type: parseInt(m[2]) || 6, bonus: m[3] ? parseInt(m[3]) : 0 };
 }
@@ -231,10 +231,10 @@ function findAmmoConsumable(ctx, inventory) {
   return null;
 }
 
-function setDiceContext(label, damageStr, ammoOverride = null) {
+function setDiceContext(label, damageStr, ammoOverride = null, spellSlot = null, icon = "⚔️") {
   const parsed = parseDamage(damageStr);
   if (parsed) Object.assign(diceState, parsed);
-  diceState.context = { label, damage: damageStr, ammo: ammoOverride };
+  diceState.context = { label, damage: damageStr, ammo: ammoOverride, spellSlot, icon };
   switchToTab("dice");
   renderDiceTab();
 }
@@ -270,14 +270,24 @@ function renderDiceTab() {
         </div>
       </section>
       ${diceState.context ? (() => {
-          const ammoItem = findAmmoConsumable(diceState.context, currentData.inventory || []);
+          const ctx      = diceState.context;
+          const ctxIcon  = ctx.icon || "⚔️";
+          // Ammo badge
+          const ammoItem = findAmmoConsumable(ctx, currentData.inventory || []);
           const ammoQty  = ammoItem ? (ammoItem.qty ?? 1) : null;
           const ammoHtml = ammoItem
             ? ` <span class="dice-ammo-count ${ammoQty <= 0 ? "empty" : ammoQty <= 5 ? "low" : ""}">${ammoItem.emoji || "🏹"} ${ammoItem.name}: ${ammoQty}</span>`
             : "";
+          // Spell slot badge
+          let slotHtml = "";
+          if (ctx.spellSlot) {
+            const curInfo   = currentData.spellSlots?.[ctx.spellSlot.level];
+            const remaining = curInfo ? (curInfo.total - curInfo.used) : 0;
+            slotHtml = ` <span class="dice-ammo-count ${remaining <= 0 ? "empty" : remaining === 1 ? "low" : ""}">🔮 ${ctx.spellSlot.level}: ${remaining} left</span>`;
+          }
           return `
         <div class="dice-context-bar">
-          <span class="dice-context-label">⚔️ ${diceState.context.label}${diceState.context.damage ? ` (${diceState.context.damage})` : ""}${ammoHtml}</span>
+          <span class="dice-context-label">${ctxIcon} ${ctx.label}${ctx.damage ? ` (${ctx.damage})` : ""}${ammoHtml}${slotHtml}</span>
           <button class="dice-context-clear" id="diceContextClear">✕ Clear</button>
         </div>`;
         })() : ""}
@@ -323,6 +333,18 @@ function renderDiceTab() {
 }
 
 async function executeDiceRoll() {
+  // Spell slot check — block and consume if applicable
+  if (diceState.context?.spellSlot) {
+    const slotKey = diceState.context.spellSlot.level;
+    const curInfo = currentData.spellSlots?.[slotKey];
+    if (!curInfo || curInfo.used >= curInfo.total) {
+      toast(`❌ No ${slotKey} slots remaining!`);
+      renderDiceTab();
+      return;
+    }
+    await update({ [`spellSlots.${slotKey}.used`]: (curInfo.used ?? 0) + 1 }, null, null, null);
+  }
+
   // Ammo check — find linked consumable and block if depleted
   const inv      = [...(currentData.inventory || [])];
   const ammoItem = findAmmoConsumable(diceState.context, inv);
@@ -330,7 +352,7 @@ async function executeDiceRoll() {
 
   if (ammoItem && (ammoItem.qty ?? 1) <= 0) {
     toast(`❌ No ${ammoItem.name} remaining!`);
-    renderDiceTab(); // refresh count display
+    renderDiceTab();
     return;
   }
 
@@ -522,26 +544,40 @@ function renderSpellActions(data) {
       const slotLevel = spell.slotLevel || null;
       const slotInfo  = slotLevel ? (slots[`Level ${slotLevel}`] ?? null) : null;
       const noSlots   = !!(slotInfo && slotInfo.used >= slotInfo.total);
-      const meta      = [spell.level ? `Lvl ${spell.level}` : "Cantrip", spell.castingTime, spell.range].filter(Boolean).join(" · ");
+      const meta      = [
+        spell.level ? `Lvl ${spell.level}` : "Cantrip",
+        spell.castingTime,
+        spell.range,
+        spell.damage ? `🎲 ${spell.damage}` : null,
+      ].filter(Boolean).join(" · ");
 
       spellsActionsCol.appendChild(makeActionCard(
         "✨", spell.name, meta,
-        async () => {
-          if (slotLevel && slotInfo) {
-            if (slotInfo.used >= slotInfo.total) { toast("❌ No spell slots!"); return; }
-            await update(
-              { [`spellSlots.Level ${slotLevel}.used`]: (slotInfo.used ?? 0) + 1 },
-              "spell", `${currentData.name} cast ${spell.name} (expended Lvl ${slotLevel} slot)`,
-              currentData.name
-            );
+        () => {
+          if (spell.damage) {
+            // Has dice formula — open dice tab (slot consumed on roll)
+            const spellSlot = slotLevel ? { level: `Level ${slotLevel}`, info: slotInfo } : null;
+            setDiceContext(spell.name, spell.damage, null, spellSlot, "✨");
           } else {
-            await addDoc(collection(db, "sessionLog"), {
-              type: "spell", actor: currentData.name,
-              message: `${currentData.name} used ${spell.name}`,
-              charId, timestamp: serverTimestamp()
-            });
+            // No damage dice — cast immediately and log
+            (async () => {
+              if (slotLevel && slotInfo) {
+                if (slotInfo.used >= slotInfo.total) { toast("❌ No spell slots!"); return; }
+                await update(
+                  { [`spellSlots.Level ${slotLevel}.used`]: (slotInfo.used ?? 0) + 1 },
+                  "spell", `${currentData.name} cast ${spell.name} (expended Lvl ${slotLevel} slot)`,
+                  currentData.name
+                );
+              } else {
+                await addDoc(collection(db, "sessionLog"), {
+                  type: "spell", actor: currentData.name,
+                  message: `${currentData.name} used ${spell.name}`,
+                  charId, timestamp: serverTimestamp()
+                });
+              }
+              toast(`✨ ${spell.name} cast!`);
+            })();
           }
-          toast(`✨ ${spell.name} cast!`);
         },
         noSlots
       ));
@@ -890,7 +926,7 @@ takenCheckbox.addEventListener("change", async () => {
 
 const LOG_ICONS = {
   damage:"⚔️", heal:"💚", spell:"✨", slot:"🔮",
-  condition:"🌀", inventory:"🎒", death:"💀", note:"📜", roll:"🎲", default:"📖"
+  condition:"🌀", inventory:"🎒", death:"💀", note:"📜", roll:"🎲", turn:"🔔", default:"📖"
 };
 
 function timeAgo(ts) {
@@ -958,6 +994,38 @@ function rerenderLocationFeed() {
   visible.forEach(e => locationLogFeed.appendChild(e.el));
 }
 
+// ---- Turn banner ---------------------------------------------------------------
+
+const TURN_PHASE_ICONS = { combat:"⚔️", exploration:"🗺️", roleplay:"💬", downtime:"🏕️" };
+
+let allCampaignTurns = {};
+
+function updateTurnBanner() {
+  const myLocId = currentData.locationId ?? null;
+  // Location-specific turn takes priority over global
+  const turn = (myLocId && allCampaignTurns[myLocId]?.active && allCampaignTurns[myLocId])
+            || (allCampaignTurns["__global__"]?.active && allCampaignTurns["__global__"])
+            || null;
+  renderTurnBanner(turn);
+}
+
+function renderTurnBanner(turnData) {
+  const banner = document.getElementById("turnBanner");
+  if (!banner) return;
+  if (!turnData?.active) {
+    banner.className = "turn-banner hidden";
+    return;
+  }
+  const phase = turnData.phase || "combat";
+  const icon  = TURN_PHASE_ICONS[phase] || "⚔️";
+  banner.className = `turn-banner turn-banner--${phase}`;
+  banner.innerHTML = `
+    <span class="turn-banner-round">${icon} Round ${turnData.round}</span>
+    <span class="turn-banner-sep">·</span>
+    <span class="turn-banner-desc">${turnData.description || ""}</span>
+  `;
+}
+
 function initLogs() {
   const q = query(collection(db, "sessionLog"), orderBy("timestamp", "desc"), limit(80));
 
@@ -987,6 +1055,15 @@ function initLogs() {
     });
     rerenderLocationFeed();
   });
+
+  // Turn banner — watches all per-location turn docs
+  onSnapshot(collection(db, "campaign"), snap => {
+    snap.docChanges().forEach(change => {
+      if (change.type === "removed") delete allCampaignTurns[change.doc.id];
+      else allCampaignTurns[change.doc.id] = change.doc.data();
+    });
+    updateTurnBanner();
+  }, () => updateTurnBanner());
 
   // Track all characters to know who shares this location
   onSnapshot(collection(db, "characters"), (snapshot) => {
@@ -1026,6 +1103,7 @@ onSnapshot(charRef, (snap) => {
   renderLocation(data.locationId ?? null);
   rebuildLocationCharIds();
   rerenderLocationFeed();
+  updateTurnBanner();
 }, (err) => {
   showError();
   console.error("Sheet listener error:", err);

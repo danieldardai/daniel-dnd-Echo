@@ -1,7 +1,7 @@
 import { db } from "./firebase-config.js";
 import {
   collection, onSnapshot, orderBy, query,
-  doc, updateDoc, addDoc, serverTimestamp,
+  doc, updateDoc, addDoc, deleteDoc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const DM_PASSWORD = "1234";
@@ -18,11 +18,98 @@ const CONDITIONS = [
   "Charmed", "Paralyzed", "Exhausted", "Burning", "Bleeding",
 ];
 
+const EMOJI_CATEGORIES = [
+  { label: "Weapons",    emojis: ["⚔️","🗡️","🏹","🔱","🪃","🛡️","⚒️","🔨","🪓","🪖","🗺️","🧨"] },
+  { label: "Potions",    emojis: ["🧪","💊","🍵","🫗","🧴","🫙","🍶","🍷","🍺","🧬","💉"] },
+  { label: "Food",       emojis: ["🍖","🍗","🥩","🧀","🍞","🥖","🫓","🍎","🍇","🥜","🫘","🍯"] },
+  { label: "Magic",      emojis: ["✨","🔮","💎","💍","📿","🪄","🌟","⭐","🌙","☀️","⚡","🔥","❄️","🌊","🪬"] },
+  { label: "Tools",      emojis: ["🪢","🔑","🗝️","📜","📖","🧭","🕯️","🔦","🪔","⛏️","🧲","🪝","🧰","⚙️","🔩"] },
+  { label: "Containers", emojis: ["🎒","💼","🧳","📦","🏺","💰","🪙","🎁","🛍️","🫧"] },
+  { label: "Nature",     emojis: ["🦴","🪶","🌿","🍄","🌺","🐍","🦅","🐺","🕷️","🦋","🌾","🍀"] },
+  { label: "Misc",       emojis: ["🧿","🎲","🎭","🗿","🔔","🎵","⚗️","🧲","📡","🪆","🎪","🪬"] },
+];
+
+// ── Emoji Picker ───────────────────────────────────────────
+let _pickerCallback = null;
+
+const emojiPickerPopup = (() => {
+  const wrap = document.createElement("div");
+  wrap.id = "dmEmojiPicker";
+  wrap.className = "emoji-picker-popup hidden";
+
+  EMOJI_CATEGORIES.forEach(cat => {
+    const label = document.createElement("div");
+    label.className = "emoji-cat-label";
+    label.textContent = cat.label;
+    wrap.appendChild(label);
+
+    const grid = document.createElement("div");
+    grid.className = "emoji-grid";
+    cat.emojis.forEach(e => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "emoji-opt";
+      btn.textContent = e;
+      btn.addEventListener("click", ev => {
+        ev.stopPropagation();
+        _pickerCallback?.(e);
+        wrap.classList.add("hidden");
+      });
+      grid.appendChild(btn);
+    });
+    wrap.appendChild(grid);
+  });
+
+  document.body.appendChild(wrap);
+  document.addEventListener("click", () => wrap.classList.add("hidden"));
+  return wrap;
+})();
+
+function showEmojiPicker(anchorEl, onSelect) {
+  _pickerCallback = onSelect;
+  const rect = anchorEl.getBoundingClientRect();
+  let left = rect.left;
+  if (left + 264 > window.innerWidth) left = window.innerWidth - 268;
+  emojiPickerPopup.style.top  = `${rect.bottom + 4}px`;
+  emojiPickerPopup.style.left = `${left}px`;
+  emojiPickerPopup.classList.toggle("hidden");
+}
+
+function initEmojiPickers(container) {
+  container.querySelectorAll(".emoji-picker-trigger").forEach(trigger => {
+    const hiddenInput = container.querySelector("#" + trigger.dataset.target);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "emoji-picker-btn";
+    btn.textContent = trigger.dataset.default || "🎒";
+    btn.addEventListener("click", ev => {
+      ev.stopPropagation();
+      showEmojiPicker(btn, emoji => {
+        btn.textContent = emoji;
+        if (hiddenInput) hiddenInput.value = emoji;
+      });
+    });
+    trigger.replaceWith(btn);
+  });
+}
+
+const PHASE_ICONS = {
+  combat:      "⚔️",
+  exploration: "🗺️",
+  roleplay:    "💬",
+  downtime:    "🏕️",
+};
+
 // ── State ─────────────────────────────────────────────────
-let characters = {};
-let selectedCharId = null;
-let dmUnlocked = false;
-let unsubCharacters = null;
+let characters       = {};
+let locations        = {};
+let allTurnStates    = {};          // locationId → turnData
+let selectedTurnLocId = "__global__"; // which location the strip is managing
+let selectedCharId   = null;
+let dmUnlocked       = false;
+let unsubCharacters  = null;
+let unsubLocations   = null;
+let unsubTurn        = null;
 
 // ── DOM refs ──────────────────────────────────────────────
 const dmBtn            = document.getElementById("dmBtn");
@@ -77,22 +164,340 @@ dmCloseBtn.addEventListener("click", () => {
   document.body.style.overflow = "";
 });
 
+// ── Claude AI helpers ────────────────────────────────────
+function getClaudeApiKey() {
+  return localStorage.getItem("ebClaudeApiKey") || "";
+}
+function setClaudeApiKey(key) {
+  if (key) localStorage.setItem("ebClaudeApiKey", key.trim());
+  else localStorage.removeItem("ebClaudeApiKey");
+}
+
+async function callClaude(text, phase) {
+  const apiKey = getClaudeApiKey();
+  if (!apiKey) throw new Error("No API key configured");
+  const phaseContext = {
+    combat:      "an intense combat encounter",
+    exploration: "an exploration or discovery moment",
+    roleplay:    "a roleplay or social interaction",
+    downtime:    "a downtime or rest period",
+  }[phase] || "a scene";
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      messages: [{
+        role: "user",
+        content: `You are a narrative assistant for "Echoes Beneath," a dark fantasy tabletop RPG. The Dungeon Master wrote this description for ${phaseContext}:\n\n"${text}"\n\nRewrite it: fix typos, add atmospheric dark fantasy flair, improve clarity. Keep it 1-3 sentences. Return ONLY the improved text, no commentary.`,
+      }],
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || `API error ${response.status}`);
+  return data.content[0].text.trim();
+}
+
+function attachAiEnhance(strip, textareaId, phaseSelId, staticPhase) {
+  const enhanceBtn = strip.querySelector("#dmBtnEnhance");
+  const keyBtn     = strip.querySelector("#dmBtnConfigKey");
+  const statusEl   = strip.querySelector("#dmAiStatus");
+  const textarea   = strip.querySelector("#" + textareaId);
+  if (!enhanceBtn || !textarea) return;
+
+  let originalText = null;
+
+  const setStatus = (msg, isError = false) => {
+    statusEl.textContent = msg;
+    statusEl.className = "dm-ai-status" + (isError ? " error" : "");
+  };
+
+  enhanceBtn.addEventListener("click", async () => {
+    const text = textarea.value.trim();
+    if (!text) { textarea.focus(); return; }
+
+    let apiKey = getClaudeApiKey();
+    if (!apiKey) {
+      apiKey = prompt("Enter your Anthropic API key (stored locally in this browser only):");
+      if (!apiKey) return;
+      setClaudeApiKey(apiKey);
+    }
+
+    const phase = phaseSelId
+      ? (strip.querySelector("#" + phaseSelId)?.value || "combat")
+      : (staticPhase || "combat");
+    enhanceBtn.disabled = true;
+    strip.querySelector(".dm-ai-undo-btn")?.remove();
+    setStatus("✨ Enhancing…");
+
+    try {
+      const enhanced = await callClaude(text, phase);
+      originalText = text;
+      textarea.value = enhanced;
+      setStatus("");
+      const undoBtn = document.createElement("button");
+      undoBtn.className = "dm-btn-link dm-ai-undo-btn";
+      undoBtn.textContent = "↩ Undo";
+      undoBtn.addEventListener("click", () => {
+        textarea.value = originalText;
+        originalText = null;
+        undoBtn.remove();
+      });
+      statusEl.after(undoBtn);
+    } catch (err) {
+      setStatus("⚠ " + err.message, true);
+    } finally {
+      enhanceBtn.disabled = false;
+    }
+  });
+
+  keyBtn.addEventListener("click", () => {
+    const current = getClaudeApiKey();
+    const key = prompt("Anthropic API key (leave blank to clear):", current ? "sk-ant-…(hidden)" : "");
+    if (key === null) return;
+    setClaudeApiKey(key);
+    setStatus(key ? "🔑 Key saved" : "🔑 Key cleared");
+    setTimeout(() => setStatus(""), 2000);
+  });
+}
+
+// ── Turn strip ────────────────────────────────────────────
+
+function buildLocOptions(selected) {
+  const sorted = Object.values(locations).sort((a, b) => (a.order || 0) - (b.order || 0));
+  return `
+    <option value="__global__" ${selected === "__global__" ? "selected" : ""}>🌐 All Locations</option>
+    ${sorted.map(loc => `
+      <option value="${loc.id}" ${selected === loc.id ? "selected" : ""}>
+        ${loc.emoji || "🗺️"} ${loc.name}
+      </option>
+    `).join("")}
+  `;
+}
+
+function locationLabel(locId) {
+  if (locId === "__global__") return "All Locations";
+  return locations[locId] ? `${locations[locId].emoji || "🗺️"} ${locations[locId].name}` : locId;
+}
+
+function renderTurnStrip() {
+  const strip = document.getElementById("dmTurnStrip");
+  if (!strip) return;
+
+  const currentTurn = allTurnStates[selectedTurnLocId] ?? null;
+  const turnDocId   = selectedTurnLocId;
+
+  // Location selector row — always visible
+  const locRowHTML = `
+    <div class="dm-turn-loc-row">
+      <label class="dm-turn-loc-label">Location</label>
+      <select class="dm-input dm-turn-loc-sel" id="dmTurnLocSel">
+        ${buildLocOptions(selectedTurnLocId)}
+      </select>
+    </div>
+  `;
+
+  if (!currentTurn?.active) {
+    strip.innerHTML = `
+      ${locRowHTML}
+      <div class="dm-turn-row dm-turn-idle">
+        <span class="dm-turn-idle-label">No active turn for ${locationLabel(selectedTurnLocId)}</span>
+        <button class="dm-btn dm-btn-damage dm-btn-sm" id="dmBtnNewTurn">▶ New Turn</button>
+      </div>
+      <div class="dm-turn-form hidden" id="dmTurnForm">
+        <div class="dm-turn-form-inner">
+          <select class="dm-input dm-turn-phase-sel" id="dmTurnPhase">
+            <option value="combat">⚔️ Combat</option>
+            <option value="exploration">🗺️ Exploration</option>
+            <option value="roleplay">💬 Roleplay</option>
+            <option value="downtime">🏕️ Downtime</option>
+          </select>
+          <textarea class="dm-turn-textarea" id="dmTurnDesc" rows="2"
+            placeholder="Describe what is happening this turn…"></textarea>
+        </div>
+        <div class="dm-ai-row">
+          <button class="dm-btn dm-btn-neutral dm-btn-sm" id="dmBtnEnhance">✨ Enhance</button>
+          <span class="dm-ai-status" id="dmAiStatus"></span>
+          <button class="dm-btn-link dm-ai-key-btn" id="dmBtnConfigKey" title="Configure AI API key">🔑</button>
+        </div>
+        <div class="dm-turn-form-btns">
+          <button class="dm-btn dm-btn-heal" id="dmBtnBeginTurn">▶ Begin</button>
+          <button class="dm-btn dm-btn-neutral dm-btn-sm" id="dmBtnCancelTurn">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    strip.querySelector("#dmTurnLocSel").addEventListener("change", e => {
+      selectedTurnLocId = e.target.value;
+      renderTurnStrip();
+    });
+    strip.querySelector("#dmBtnNewTurn").addEventListener("click", () => {
+      strip.querySelector("#dmTurnForm").classList.remove("hidden");
+      strip.querySelector("#dmBtnNewTurn").classList.add("hidden");
+      strip.querySelector("#dmTurnDesc").focus();
+    });
+    strip.querySelector("#dmBtnCancelTurn").addEventListener("click", () => {
+      strip.querySelector("#dmTurnForm").classList.add("hidden");
+      strip.querySelector("#dmBtnNewTurn").classList.remove("hidden");
+    });
+    attachAiEnhance(strip, "dmTurnDesc", "dmTurnPhase");
+
+    strip.querySelector("#dmBtnBeginTurn").addEventListener("click", async () => {
+      const desc  = strip.querySelector("#dmTurnDesc").value.trim();
+      if (!desc) { strip.querySelector("#dmTurnDesc").focus(); return; }
+      const phase   = strip.querySelector("#dmTurnPhase").value;
+      const locName = locationLabel(turnDocId);
+      await setDoc(doc(db, "campaign", turnDocId), {
+        active: true, round: 1, phase, description: desc,
+        locationId: turnDocId, startedAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, "sessionLog"), {
+        type: "turn", actor: "DM",
+        message: `${PHASE_ICONS[phase]} [${locName}] Round 1 begins — ${desc}`,
+        timestamp: serverTimestamp(), charId: null,
+      });
+    });
+
+  } else {
+    const { round = 1, phase = "combat", description = "" } = currentTurn;
+    const icon    = PHASE_ICONS[phase] || "⚔️";
+    const locName = locationLabel(turnDocId);
+    strip.innerHTML = `
+      ${locRowHTML}
+      <div class="dm-turn-row dm-turn-active-header">
+        <span class="dm-turn-badge dm-turn-badge--${phase}">${icon} Round ${round}</span>
+        <span class="dm-turn-phase-tag">${phase.toUpperCase()}</span>
+        <div class="dm-turn-header-btns">
+          <button class="dm-btn dm-btn-damage dm-btn-sm" id="dmBtnNextRound">▶ Next Round</button>
+          <button class="dm-btn dm-btn-neutral dm-btn-sm" id="dmBtnEndTurn">✕ End</button>
+        </div>
+      </div>
+      <div class="dm-turn-desc-bar" id="dmTurnDescBar">
+        <span class="dm-turn-desc-text">${description}</span>
+        <button class="dm-btn-link" id="dmBtnEditDesc">edit</button>
+      </div>
+      <div class="dm-turn-form hidden" id="dmNextForm">
+        <div class="dm-turn-form-inner">
+          <textarea class="dm-turn-textarea" id="dmNextDesc" rows="2"
+            placeholder="Describe Round ${round + 1}… (leave blank to keep current)"></textarea>
+        </div>
+        <div class="dm-ai-row">
+          <button class="dm-btn dm-btn-neutral dm-btn-sm" id="dmBtnEnhance">✨ Enhance</button>
+          <span class="dm-ai-status" id="dmAiStatus"></span>
+          <button class="dm-btn-link dm-ai-key-btn" id="dmBtnConfigKey" title="Configure AI API key">🔑</button>
+        </div>
+        <div class="dm-turn-form-btns">
+          <button class="dm-btn dm-btn-heal" id="dmBtnConfirmNext">▶ Round ${round + 1}</button>
+          <button class="dm-btn dm-btn-neutral dm-btn-sm" id="dmBtnCancelNext">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    strip.querySelector("#dmTurnLocSel").addEventListener("change", e => {
+      selectedTurnLocId = e.target.value;
+      renderTurnStrip();
+    });
+    attachAiEnhance(strip, "dmNextDesc", null, phase);
+
+    strip.querySelector("#dmBtnNextRound").addEventListener("click", () => {
+      strip.querySelector("#dmNextForm").classList.remove("hidden");
+      strip.querySelector("#dmBtnNextRound").classList.add("hidden");
+      strip.querySelector("#dmNextDesc").focus();
+    });
+    strip.querySelector("#dmBtnCancelNext").addEventListener("click", () => {
+      strip.querySelector("#dmNextForm").classList.add("hidden");
+      strip.querySelector("#dmBtnNextRound").classList.remove("hidden");
+    });
+    strip.querySelector("#dmBtnConfirmNext").addEventListener("click", async () => {
+      const newDesc  = strip.querySelector("#dmNextDesc").value.trim() || description;
+      const newRound = round + 1;
+      await setDoc(doc(db, "campaign", turnDocId), {
+        active: true, round: newRound, phase, description: newDesc,
+        locationId: turnDocId, startedAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, "sessionLog"), {
+        type: "turn", actor: "DM",
+        message: `${icon} [${locName}] Round ${newRound} — ${newDesc}`,
+        timestamp: serverTimestamp(), charId: null,
+      });
+    });
+    strip.querySelector("#dmBtnEditDesc").addEventListener("click", () => {
+      const bar = strip.querySelector("#dmTurnDescBar");
+      bar.innerHTML = `
+        <input type="text" class="dm-input" id="dmDescEdit" style="flex:1" />
+        <button class="dm-btn dm-btn-heal dm-btn-sm" id="dmBtnSaveDesc">Save</button>
+      `;
+      const inp = bar.querySelector("#dmDescEdit");
+      inp.value = description;
+      inp.focus();
+      const save = async () => {
+        const newDesc = inp.value.trim() || description;
+        await setDoc(doc(db, "campaign", turnDocId), {
+          active: true, round, phase, description: newDesc,
+          locationId: turnDocId, startedAt: currentTurn.startedAt || serverTimestamp(),
+        });
+      };
+      bar.querySelector("#dmBtnSaveDesc").addEventListener("click", save);
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") save(); });
+    });
+    strip.querySelector("#dmBtnEndTurn").addEventListener("click", async () => {
+      if (!confirm(`End turn for ${locName} after Round ${round}?`)) return;
+      await setDoc(doc(db, "campaign", turnDocId), {
+        active: false, round: 0, phase: "exploration", description: "",
+        locationId: turnDocId, endedAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, "sessionLog"), {
+        type: "turn", actor: "DM",
+        message: `✕ [${locName}] Turn ended after Round ${round}`,
+        timestamp: serverTimestamp(), charId: null,
+      });
+    });
+  }
+}
+
 // ── Firestore listener ────────────────────────────────────
 function startListening() {
   if (unsubCharacters) return;
+
   const q = query(collection(db, "characters"), orderBy("name"));
   unsubCharacters = onSnapshot(q, snap => {
     snap.docChanges().forEach(change => {
       const id = change.doc.id;
-      if (change.type === "removed") {
-        delete characters[id];
-      } else {
-        characters[id] = { id, ...change.doc.data() };
-      }
+      if (change.type === "removed") delete characters[id];
+      else characters[id] = { id, ...change.doc.data() };
     });
     renderCharList();
-    if (selectedCharId) renderActiveTab();
+    const tab = activeTab();
+    if (tab === "locations") renderLocationsTab();
+    else if (selectedCharId) renderActiveTab();
   });
+
+  const lq = query(collection(db, "locations"), orderBy("order"));
+  unsubLocations = onSnapshot(lq, snap => {
+    snap.docChanges().forEach(change => {
+      const id = change.doc.id;
+      if (change.type === "removed") delete locations[id];
+      else locations[id] = { id, ...change.doc.data() };
+    });
+    if (activeTab() === "locations") renderLocationsTab();
+  });
+
+  // Turn listener — watches all per-location turn documents
+  if (!unsubTurn) {
+    unsubTurn = onSnapshot(collection(db, "campaign"), snap => {
+      snap.docChanges().forEach(change => {
+        if (change.type === "removed") delete allTurnStates[change.doc.id];
+        else allTurnStates[change.doc.id] = change.doc.data();
+      });
+      renderTurnStrip();
+    }, () => renderTurnStrip());
+  }
 }
 
 // ── Character sidebar ─────────────────────────────────────
@@ -134,6 +539,9 @@ function activeTab() {
 }
 
 function renderActiveTab() {
+  const tab  = activeTab();
+  if (tab === "locations") { renderLocationsTab(); return; }
+
   const char = selectedCharId ? characters[selectedCharId] : null;
   if (!char) {
     ["combat", "inventory", "stats", "log"].forEach(t => {
@@ -142,11 +550,11 @@ function renderActiveTab() {
     });
     return;
   }
-  const tab = activeTab();
   switch (tab) {
     case "combat":    renderCombatTab(char);    break;
     case "inventory": renderInventoryTab(char); break;
     case "stats":     renderStatsTab(char);     break;
+    case "spells":    renderSpellsTab(char);    break;
     case "log":       renderLogTab(char);       break;
   }
 }
@@ -385,7 +793,8 @@ function renderInventoryTab(char) {
           <summary>+ Add Consumable</summary>
           <div class="dm-form-fields">
             <input class="dm-input" id="dmCName" placeholder="Name" style="flex:2;min-width:120px" />
-            <input class="dm-input" id="dmCEmoji" placeholder="🎒" maxlength="4" style="width:54px;min-width:unset;flex:none" />
+            <span class="emoji-picker-trigger" data-target="dmCEmoji" data-default="🎒"></span>
+            <input type="hidden" id="dmCEmoji" value="🎒" />
             <input class="dm-input" type="number" id="dmCQty" placeholder="Qty" min="1" value="1" style="width:60px;min-width:unset;flex:none" />
             <input class="dm-input" type="number" id="dmCWeight" placeholder="kg" step="0.1" min="0" value="0.1" style="width:64px;min-width:unset;flex:none" />
             <button class="dm-btn dm-btn-heal" id="dmBtnAddConsumable">Add</button>
@@ -399,7 +808,8 @@ function renderInventoryTab(char) {
           <summary>+ Add Equipment</summary>
           <div class="dm-form-fields">
             <input class="dm-input" id="dmEName" placeholder="Name" style="flex:2;min-width:120px" />
-            <input class="dm-input" id="dmEEmoji" placeholder="⚔️" maxlength="4" style="width:54px;min-width:unset;flex:none" />
+            <span class="emoji-picker-trigger" data-target="dmEEmoji" data-default="⚔️"></span>
+            <input type="hidden" id="dmEEmoji" value="⚔️" />
             <select class="dm-input" id="dmEType" style="flex:none">
               <option value="weapon">Weapon</option>
               <option value="armor">Armor</option>
@@ -422,6 +832,8 @@ function renderInventoryTab(char) {
       </div>
     </div>
   `;
+
+  initEmojiPickers(el);
 
   // Render consumables list
   const cList = el.querySelector("#dmConsumablesList");
@@ -565,6 +977,121 @@ function makeInvRow(item, realIdx, char, isConsumable) {
   return div;
 }
 
+// ── SPELLS TAB ───────────────────────────────────────────
+function renderSpellsTab(char) {
+  const el     = document.getElementById("dm-tab-spells");
+  const spells = char.spells     || [];
+  const slots  = char.spellSlots || {};
+  const sortedSlots = Object.entries(slots).sort(([a], [b]) => a.localeCompare(b));
+
+  el.innerHTML = `
+    <div class="dm-section">
+      <h3 class="dm-section-title">Spell Slots</h3>
+      ${sortedSlots.length
+        ? `<div class="dm-spell-slots-grid" id="dmSpellSlotsGrid"></div>`
+        : `<p class="dm-empty">No spell slots.</p>`}
+    </div>
+    <div class="dm-section">
+      <h3 class="dm-section-title">
+        Spells
+        <span class="dm-spells-hint">Type a dice formula in the 🎲 column to link a roll</span>
+      </h3>
+      ${spells.length
+        ? `<div class="dm-spell-list" id="dmSpellList"></div>`
+        : `<p class="dm-empty">No spells configured for this character.</p>`}
+    </div>
+  `;
+
+  // ── Slot tracker ──────────────────────────────────────
+  if (sortedSlots.length) {
+    const grid = el.querySelector("#dmSpellSlotsGrid");
+    sortedSlots.forEach(([level, info]) => {
+      const used  = info.used  ?? 0;
+      const total = info.total ?? 0;
+      const row   = document.createElement("div");
+      row.className = "dm-spell-slot-row";
+      const pips = Array.from({ length: total }, (_, i) =>
+        `<span class="dm-slot-pip${i < used ? " used" : ""}"></span>`
+      ).join("");
+      row.innerHTML = `
+        <span class="dm-spell-slot-label">${level}</span>
+        <div class="dm-slot-pips">${pips}</div>
+        <span class="dm-spell-slot-count">${used}/${total}</span>
+        <button class="dm-btn dm-btn-neutral dm-btn-sm" data-level="${level}" data-action="reset">Reset</button>
+        <button class="dm-stat-btn" data-level="${level}" data-action="minus" ${used <= 0 ? "disabled" : ""}>−</button>
+        <button class="dm-stat-btn" data-level="${level}" data-action="plus"  ${used >= total ? "disabled" : ""}>+</button>
+      `;
+      grid.appendChild(row);
+    });
+
+    grid.addEventListener("click", async e => {
+      const { level, action } = e.target.dataset;
+      if (!level || !action) return;
+      const c   = characters[selectedCharId];
+      const cur = c.spellSlots?.[level] ?? { total: 0, used: 0 };
+      let newUsed = cur.used ?? 0;
+      if      (action === "reset") newUsed = 0;
+      else if (action === "minus") newUsed = Math.max(0, newUsed - 1);
+      else if (action === "plus")  newUsed = Math.min(cur.total ?? 0, newUsed + 1);
+      else return;
+      await updateDoc(charRef(), { [`spellSlots.${level}.used`]: newUsed });
+    });
+  }
+
+  // ── Spell list ────────────────────────────────────────
+  if (spells.length) {
+    const list = el.querySelector("#dmSpellList");
+
+    // Header row
+    const hdr = document.createElement("div");
+    hdr.className = "dm-spell-row dm-spell-row--header";
+    hdr.innerHTML = `
+      <span></span>
+      <span>Name</span>
+      <span>Level · Type</span>
+      <span>Casting</span>
+      <span>🎲 Dice</span>
+    `;
+    list.appendChild(hdr);
+
+    spells.forEach((spell, idx) => {
+      const row = document.createElement("div");
+      row.className = "dm-spell-row";
+      const levelLabel = spell.level === 0 ? "Cantrip" : `Lvl ${spell.level}`;
+      const catLabel   = spell.category || "general";
+      const catIcon    = catLabel === "attack" ? "⚔️" : catLabel === "defense" ? "🛡️" : "✨";
+      row.innerHTML = `
+        <span class="dm-spell-cat-icon" title="${catLabel}">${catIcon}</span>
+        <span class="dm-spell-name">${spell.name}</span>
+        <span class="dm-spell-meta">${levelLabel} · ${catLabel}</span>
+        <span class="dm-spell-cast">${spell.castingTime || "—"}</span>
+        <input class="dm-input dm-spell-dice-input" type="text"
+          value="${spell.damage || ""}"
+          placeholder="e.g. 2d10"
+          data-idx="${idx}" />
+      `;
+      list.appendChild(row);
+    });
+
+    list.querySelectorAll(".dm-spell-dice-input").forEach(input => {
+      const save = async () => {
+        const idx      = parseInt(input.dataset.idx);
+        const c        = characters[selectedCharId];
+        const newSpells = (c.spells || []).map((s, i) => {
+          if (i !== idx) return s;
+          const updated = { ...s };
+          if (input.value.trim()) updated.damage = input.value.trim();
+          else delete updated.damage;
+          return updated;
+        });
+        await updateDoc(charRef(), { spells: newSpells });
+      };
+      input.addEventListener("blur",    save);
+      input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); });
+    });
+  }
+}
+
 // ── LOG TAB ───────────────────────────────────────────────
 function renderLogTab(char) {
   const el = document.getElementById("dm-tab-log");
@@ -609,4 +1136,169 @@ function renderLogTab(char) {
     await updateDoc(charRef(), { notes });
     dmLog("system", "DM", `updated notes for ${char.name}`);
   });
+}
+
+// ── LOCATIONS TAB ─────────────────────────────────────────
+function renderLocationsTab() {
+  const el = document.getElementById("dm-tab-locations");
+  const sortedLocs = Object.values(locations).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const charList   = Object.values(characters).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  el.innerHTML = `
+    <div class="dm-loc-toolbar">
+      <button class="dm-btn dm-btn-neutral dm-btn-sm" id="dmBtnNewLoc">+ New Location</button>
+    </div>
+    <div class="dm-loc-create hidden" id="dmLocCreate">
+      <div class="dm-form-fields">
+        <input class="dm-input" id="dmLocEmoji" placeholder="🗺️" maxlength="4" style="width:54px;flex:none" />
+        <input class="dm-input" id="dmLocName" placeholder="Location name" style="flex:1;min-width:120px" />
+        <input class="dm-input" id="dmLocDesc" placeholder="Description (optional)" style="flex:2;min-width:160px" />
+        <button class="dm-btn dm-btn-heal" id="dmLocSave">Create</button>
+        <button class="dm-btn dm-btn-neutral" id="dmLocCancel">✕</button>
+      </div>
+    </div>
+    <div class="dm-loc-board" id="dmLocBoard"></div>
+  `;
+
+  const createDiv = el.querySelector("#dmLocCreate");
+
+  el.querySelector("#dmBtnNewLoc").addEventListener("click", () => {
+    createDiv.classList.toggle("hidden");
+    if (!createDiv.classList.contains("hidden")) el.querySelector("#dmLocName").focus();
+  });
+  el.querySelector("#dmLocCancel").addEventListener("click", () => createDiv.classList.add("hidden"));
+  el.querySelector("#dmLocSave").addEventListener("click", async () => {
+    const name = el.querySelector("#dmLocName").value.trim();
+    if (!name) return;
+    const maxOrder = Object.values(locations).reduce((m, l) => Math.max(m, l.order || 0), 0);
+    await addDoc(collection(db, "locations"), {
+      name,
+      emoji:       el.querySelector("#dmLocEmoji").value.trim() || "🗺️",
+      description: el.querySelector("#dmLocDesc").value.trim() || "",
+      order:       maxOrder + 1,
+      createdAt:   serverTimestamp(),
+    });
+    el.querySelector("#dmLocName").value  = "";
+    el.querySelector("#dmLocEmoji").value = "";
+    el.querySelector("#dmLocDesc").value  = "";
+    createDiv.classList.add("hidden");
+    dmLog("system", "DM", `created location "${name}"`);
+  });
+
+  const board = el.querySelector("#dmLocBoard");
+  const unassigned = charList.filter(c => !c.locationId || !locations[c.locationId]);
+  board.appendChild(makeLocColumn("__unassigned__", "🌐", "Unassigned", null, unassigned));
+  sortedLocs.forEach(loc => {
+    const inLoc = charList.filter(c => c.locationId === loc.id);
+    board.appendChild(makeLocColumn(loc.id, loc.emoji || "🗺️", loc.name, loc, inLoc));
+  });
+}
+
+function makeLocColumn(locId, emoji, name, locData, chars) {
+  const isUnassigned = locId === "__unassigned__";
+  const col = document.createElement("div");
+  col.className = "dm-loc-col";
+
+  const header = document.createElement("div");
+  header.className = "dm-loc-col-header";
+
+  const emojiEl = document.createElement("span");
+  emojiEl.className = "dm-loc-emoji";
+  emojiEl.textContent = emoji;
+
+  const nameEl = document.createElement("span");
+  nameEl.className = "dm-loc-name";
+  nameEl.textContent = name;
+
+  header.appendChild(emojiEl);
+  header.appendChild(nameEl);
+
+  if (locData?.description) {
+    const descEl = document.createElement("span");
+    descEl.className = "dm-loc-desc";
+    descEl.textContent = locData.description;
+    header.appendChild(descEl);
+  }
+
+  if (!isUnassigned) {
+    const delBtn = document.createElement("button");
+    delBtn.className = "dm-btn-del dm-loc-del";
+    delBtn.title = "Delete location";
+    delBtn.textContent = "✕";
+    delBtn.addEventListener("click", async () => {
+      if (!confirm(`Delete "${name}"? Characters here will become unassigned.`)) return;
+      const here = Object.values(characters).filter(c => c.locationId === locId);
+      await Promise.all(here.map(c => updateDoc(doc(db, "characters", c.id), { locationId: null })));
+      await deleteDoc(doc(db, "locations", locId));
+    });
+    header.appendChild(delBtn);
+  }
+
+  const dropZone = document.createElement("div");
+  dropZone.className = "dm-loc-drop-zone";
+  dropZone.dataset.locId = locId;
+
+  if (!chars.length) {
+    const hint = document.createElement("div");
+    hint.className = "dm-loc-empty-hint";
+    hint.textContent = "Drop characters here";
+    dropZone.appendChild(hint);
+  } else {
+    chars.forEach(char => dropZone.appendChild(makeCharChip(char)));
+  }
+
+  dropZone.addEventListener("dragover", e => {
+    e.preventDefault();
+    dropZone.classList.add("drag-over");
+  });
+  dropZone.addEventListener("dragleave", e => {
+    if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove("drag-over");
+  });
+  dropZone.addEventListener("drop", async e => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    const charId = e.dataTransfer.getData("charId");
+    if (!charId) return;
+    const newLocId = isUnassigned ? null : locId;
+    await updateDoc(doc(db, "characters", charId), { locationId: newLocId });
+    const char = characters[charId];
+    if (char) {
+      const label = isUnassigned ? "Unassigned" : (locations[locId]?.name || locId);
+      dmLog("system", "DM", `moved ${char.name} to ${label}`);
+    }
+  });
+
+  col.appendChild(header);
+  col.appendChild(dropZone);
+  return col;
+}
+
+function makeCharChip(char) {
+  const chip = document.createElement("div");
+  chip.className = "dm-loc-char-chip";
+  chip.draggable = true;
+  chip.dataset.charId = char.id;
+
+  const pct     = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
+  const hpClass = pct <= 30 ? "low" : pct <= 60 ? "mid" : "";
+
+  const nameEl = document.createElement("span");
+  nameEl.className = "dm-char-name";
+  nameEl.textContent = char.name;
+
+  const hpEl = document.createElement("span");
+  hpEl.className = `dm-char-hp ${hpClass}`;
+  hpEl.textContent = `${char.hp ?? "?"}/${char.hpMax ?? "?"}`;
+
+  chip.appendChild(nameEl);
+  chip.appendChild(hpEl);
+
+  chip.addEventListener("dragstart", e => {
+    e.dataTransfer.setData("charId", char.id);
+    e.dataTransfer.effectAllowed = "move";
+    chip.classList.add("dragging");
+  });
+  chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
+
+  return chip;
 }

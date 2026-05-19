@@ -49,6 +49,7 @@
         <h1 class="sidebar-name" id="sidebarName">…</h1>
         <p class="sidebar-meta" id="sidebarMeta"></p>
         <p class="sidebar-player" id="sidebarPlayer"></p>
+        <p class="sidebar-location" id="sidebarLocation"></p>
       </div>
 
       <!-- HP block -->
@@ -83,6 +84,7 @@
         <button class="nav-tab active" data-tab="log">📜 Campaign Log</button>
         <button class="nav-tab" data-tab="stats">📊 Stats</button>
         <button class="nav-tab" data-tab="actions">⚔️ Actions</button>
+        <button class="nav-tab" data-tab="dice">🎲 Dice</button>
         <button class="nav-tab" data-tab="inventory">🎒 Inventory</button>
         <button class="nav-tab" data-tab="notes">📝 Notes</button>
       </nav>
@@ -91,6 +93,9 @@
 
     <!-- ===== MAIN CONTENT ===== -->
     <main class="sheet-main">
+
+      <!-- Turn banner — shown when DM has an active turn -->
+      <div class="turn-banner hidden" id="turnBanner"></div>
 
       <!-- Tab: Campaign Log -->
       <div class="tab-panel" id="tab-log">
@@ -102,9 +107,9 @@
             </div>
           </div>
           <div class="log-col">
-            <h2 class="log-col-title">Global Log <span class="live-badge">⬤ Live</span></h2>
-            <div class="log-feed" id="globalLogFeed">
-              <div class="log-empty">No events yet…</div>
+            <h2 class="log-col-title">Location Log <span class="live-badge">⬤ Live</span></h2>
+            <div class="log-feed" id="locationLogFeed">
+              <div class="log-empty">No events in this location yet…</div>
             </div>
           </div>
         </div>
@@ -154,6 +159,9 @@
 
         </div>
       </div>
+
+      <!-- Tab: Dice Roll -->
+      <div class="tab-panel hidden" id="tab-dice"></div>
 
       <!-- Tab: Inventory -->
       <div class="tab-panel hidden" id="tab-inventory">

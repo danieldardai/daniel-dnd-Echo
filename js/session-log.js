@@ -17,6 +17,7 @@ const ICONS = {
   death:     "💀",
   note:      "📜",
   roll:      "🎲",
+  turn:      "🔔",
   default:   "📖"
 };
 

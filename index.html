@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Echoes Beneath</title>
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/sheet.css" />
   <link rel="stylesheet" href="css/dm.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -55,6 +56,9 @@
       <div class="section-header">
         <h2 class="section-title">Session Log</h2>
         <span class="live-badge">⬤ Live</span>
+      </div>
+      <div class="log-location-tabs" id="logLocationTabs">
+        <button class="log-loc-tab active" data-loc="all">All</button>
       </div>
       <div class="log-feed" id="logFeed">
         <div class="log-empty">No events yet this session…</div>
@@ -108,6 +112,14 @@
         <button class="dm-close-btn" id="dmCloseBtn">✕</button>
       </div>
 
+      <!-- Turn control strip — always visible, session-wide -->
+      <div class="dm-turn-strip" id="dmTurnStrip">
+        <div class="dm-turn-row dm-turn-idle">
+          <span class="dm-turn-idle-label">No active turn</span>
+          <button class="dm-btn dm-btn-damage dm-btn-sm" id="dmBtnNewTurn">▶ New Turn</button>
+        </div>
+      </div>
+
       <div class="dm-body">
         <!-- Character list sidebar -->
         <div class="dm-sidebar">
@@ -122,6 +134,8 @@
             <button class="dm-tab-btn" data-tab="inventory">🎒 Inventory</button>
             <button class="dm-tab-btn" data-tab="stats">📊 Stats</button>
             <button class="dm-tab-btn" data-tab="log">📜 Log</button>
+            <button class="dm-tab-btn" data-tab="spells">✨ Spells</button>
+            <button class="dm-tab-btn" data-tab="locations">🗺️ Locations</button>
           </div>
           <div class="dm-tab-content">
             <div class="dm-tab-panel" id="dm-tab-combat">
@@ -135,6 +149,12 @@
             </div>
             <div class="dm-tab-panel hidden" id="dm-tab-log">
               <div class="dm-no-char">Select a character from the list.</div>
+            </div>
+            <div class="dm-tab-panel hidden" id="dm-tab-spells">
+              <div class="dm-no-char">Select a character from the list.</div>
+            </div>
+            <div class="dm-tab-panel hidden" id="dm-tab-locations">
+              <div class="dm-no-char">Loading locations…</div>
             </div>
           </div>
         </div>

@@ -1,9 +1,6 @@
 import { db } from "./firebase-config.js";
 import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query
+  collection, onSnapshot, orderBy, query
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const grid      = document.getElementById("characterGrid");
@@ -12,7 +9,13 @@ const emptyEl   = document.getElementById("emptyState");
 const errorEl   = document.getElementById("errorState");
 const errorMsg  = document.getElementById("errorMessage");
 
-const cardMap = {};
+let charData     = {};
+let locationData = {};
+let cardMap      = {};
+let charsLoaded  = false;
+let locsLoaded   = false;
+
+// ── Card helpers ──────────────────────────────────────────
 
 function hpPercent(data) {
   const cur = data.hp ?? 0;
@@ -29,7 +32,7 @@ function hpColor(pct) {
 
 function conditionPips(data) {
   const conds = data.conditions;
-  if (!conds || !Object.keys(conds).length) return "";
+  if (!conds) return "";
   const active = Object.entries(conds).filter(([, v]) => v).map(([k]) => k);
   if (!active.length) return "";
   return `<div class="card-conditions">${active.map(c =>
@@ -38,18 +41,10 @@ function conditionPips(data) {
 }
 
 function buildCard(id, data) {
-  const pct = hpPercent(data);
-  const cur = data.hp ?? "?";
-  const max = data.hpMax ?? "?";
-
+  const pct  = hpPercent(data);
   const card = document.createElement("article");
   card.className = "character-card";
   card.setAttribute("data-id", id);
-
-  const portraitHTML = data.portrait
-    ? `<img src="${data.portrait}" alt="Portrait of ${data.name}" loading="lazy" />`
-    : `<div class="card-portrait-placeholder">${data.emoji || "⚔️"}</div>`;
-
   card.innerHTML = `
     <a class="card-link" href="character.html?id=${id}" aria-label="Open ${data.name}'s sheet">
       <div class="card-hp-bar-wrap" style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(0,0,0,0.3);">
@@ -58,7 +53,7 @@ function buildCard(id, data) {
       ${data.taken ? `<span class="card-taken-badge" title="Character taken">⚔️</span>` : ""}
       <span class="card-emoji">${data.emoji || "⚔️"}</span>
       <h2 class="card-name">${data.name}</h2>
-      <div class="card-hp-label">HP <strong>${cur}</strong> / ${max}</div>
+      <div class="card-hp-label">HP <strong>${data.hp ?? "?"}</strong> / ${data.hpMax ?? "?"}</div>
       ${conditionPips(data)}
     </a>
   `;
@@ -69,52 +64,154 @@ function updateCard(id, data) {
   const card = cardMap[id];
   if (!card) return;
   const pct = hpPercent(data);
-  const cur = data.hp ?? "?";
-  const max = data.hpMax ?? "?";
 
   const bar = card.querySelector(".card-hp-bar");
   if (bar) { bar.style.width = `${pct}%`; bar.style.background = hpColor(pct); }
 
   const label = card.querySelector(".card-hp-label");
-  if (label) label.innerHTML = `HP <strong>${cur}</strong> / ${max}`;
+  if (label) label.innerHTML = `HP <strong>${data.hp ?? "?"}</strong> / ${data.hpMax ?? "?"}`;
 
   const condEl = card.querySelector(".card-conditions");
   const pip = conditionPips(data);
   if (condEl) condEl.remove();
-  if (pip) {
-    const link = card.querySelector(".card-link");
-    link.insertAdjacentHTML("beforeend", pip);
-  }
+  if (pip) card.querySelector(".card-link").insertAdjacentHTML("beforeend", pip);
 
-  const existingBadge = card.querySelector(".card-taken-badge");
-  if (data.taken && !existingBadge) {
-    const badge = document.createElement("span");
-    badge.className = "card-taken-badge";
-    badge.title = "Character taken";
-    badge.textContent = "⚔️";
-    card.querySelector(".card-link").prepend(badge);
-  } else if (!data.taken && existingBadge) {
-    existingBadge.remove();
+  const badge = card.querySelector(".card-taken-badge");
+  if (data.taken && !badge) {
+    const b = document.createElement("span");
+    b.className = "card-taken-badge"; b.title = "Character taken"; b.textContent = "⚔️";
+    card.querySelector(".card-link").prepend(b);
+  } else if (!data.taken && badge) {
+    badge.remove();
   }
 }
 
-const q = query(collection(db, "characters"), orderBy("name"));
+// ── Layout render ──────────────────────────────────────────
 
-onSnapshot(q, (snapshot) => {
+function rerender() {
+  if (!charsLoaded || !locsLoaded) return;
+
   loadingEl.classList.add("hidden");
-  if (snapshot.empty) { emptyEl.classList.remove("hidden"); return; }
+  grid.querySelectorAll(".location-section, .character-card").forEach(el => el.remove());
+
+  const chars = Object.values(charData).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (!chars.length) { emptyEl.classList.remove("hidden"); return; }
   emptyEl.classList.add("hidden");
 
-  snapshot.docChanges().forEach((change) => {
-    const id   = change.doc.id;
-    const data = change.doc.data();
-    if (change.type === "added")         { const c = buildCard(id, data); cardMap[id] = c; grid.appendChild(c); }
-    else if (change.type === "modified") { updateCard(id, data); }
-    else if (change.type === "removed")  { cardMap[id]?.remove(); delete cardMap[id]; }
+  const hasLocations = Object.keys(locationData).length > 0;
+
+  if (!hasLocations) {
+    grid.classList.remove("has-locations");
+    chars.forEach(char => {
+      if (!cardMap[char.id]) cardMap[char.id] = buildCard(char.id, char);
+      grid.appendChild(cardMap[char.id]);
+    });
+    return;
+  }
+
+  grid.classList.add("has-locations");
+  const sortedLocs = Object.values(locationData).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  sortedLocs.forEach(loc => {
+    const inLoc = chars.filter(c => c.locationId === loc.id);
+    if (!inLoc.length) return;
+    const section = makeSection(loc.emoji || "🗺️", loc.name, loc.description || "", inLoc);
+    grid.appendChild(section);
   });
-}, (err) => {
-  loadingEl.classList.add("hidden");
-  errorEl.classList.remove("hidden");
-  errorMsg.textContent = `Could not reach the realm… (${err.message})`;
-  console.error("Firestore error:", err);
-});
+
+  const unassigned = chars.filter(c => !c.locationId || !locationData[c.locationId]);
+  if (unassigned.length) {
+    const showHeader = chars.length > unassigned.length;
+    const section = makeSection(
+      showHeader ? "🌐" : null,
+      showHeader ? "Unassigned" : null,
+      "",
+      unassigned
+    );
+    grid.appendChild(section);
+  }
+}
+
+function makeSection(emoji, name, desc, chars) {
+  const section = document.createElement("div");
+  section.className = "location-section";
+
+  if (name) {
+    section.innerHTML = `
+      <div class="location-section-header">
+        <span class="location-section-emoji">${emoji}</span>
+        <span class="location-section-name">${name}</span>
+        ${desc ? `<span class="location-section-desc">${desc}</span>` : ""}
+      </div>
+    `;
+  }
+
+  const cardGrid = document.createElement("div");
+  cardGrid.className = "location-card-grid";
+  chars.forEach(char => {
+    if (!cardMap[char.id]) cardMap[char.id] = buildCard(char.id, char);
+    cardGrid.appendChild(cardMap[char.id]);
+  });
+  section.appendChild(cardGrid);
+  return section;
+}
+
+// ── Characters listener ───────────────────────────────────
+
+onSnapshot(
+  query(collection(db, "characters"), orderBy("name")),
+  (snapshot) => {
+    let needsRerender = false;
+    snapshot.docChanges().forEach(change => {
+      const id   = change.doc.id;
+      const data = change.doc.data();
+      if (change.type === "removed") {
+        delete charData[id];
+        cardMap[id]?.remove();
+        delete cardMap[id];
+        needsRerender = true;
+      } else if (change.type === "added") {
+        charData[id] = { id, ...data };
+        needsRerender = true;
+      } else {
+        const oldLoc = charData[id]?.locationId ?? null;
+        charData[id] = { id, ...data };
+        if (oldLoc !== (data.locationId ?? null)) {
+          cardMap[id]?.remove();
+          delete cardMap[id];
+          needsRerender = true;
+        } else {
+          updateCard(id, data);
+        }
+      }
+    });
+    charsLoaded = true;
+    if (needsRerender) rerender();
+  },
+  (err) => {
+    loadingEl.classList.add("hidden");
+    errorEl.classList.remove("hidden");
+    errorMsg.textContent = `Could not reach the realm… (${err.message})`;
+    console.error("Firestore error:", err);
+  }
+);
+
+// ── Locations listener ────────────────────────────────────
+
+onSnapshot(
+  query(collection(db, "locations"), orderBy("order")),
+  (snapshot) => {
+    snapshot.docChanges().forEach(change => {
+      const id = change.doc.id;
+      if (change.type === "removed") delete locationData[id];
+      else locationData[id] = { id, ...change.doc.data() };
+    });
+    locsLoaded = true;
+    rerender();
+  },
+  (err) => {
+    console.warn("Locations listener error (check Firestore rules):", err);
+    locsLoaded = true;
+    rerender();
+  }
+);
