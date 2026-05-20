@@ -150,6 +150,42 @@ body {
   grid-template-columns: repeat(6, 1fr);
   gap: 0.5rem;
 }
+.character-grid.has-locations {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+/* ---- Location Sections ---- */
+.location-section {}
+.location-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+.location-section-emoji { font-size: 1.3rem; line-height: 1; }
+.location-section-name {
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+.location-section-desc {
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--parchment-dim);
+  margin-left: auto;
+}
+.location-card-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.5rem;
+}
 
 /* ---- Character Card ---- */
 .character-card {
@@ -502,6 +538,7 @@ body {
   .logo-title { font-size: 1.5rem; }
   .logo-rune  { font-size: 1.5rem; }
   .character-grid { grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
+  .location-card-grid { grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
   .card-emoji { font-size: 1.3rem; }
   .card-name  { font-size: 0.5rem; }
   .card-hp-label { font-size: 0.45rem; }
