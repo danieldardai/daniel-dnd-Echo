@@ -419,7 +419,7 @@ body.sheet-page {
 .log-icon    { font-size: 0.85rem; flex-shrink: 0; margin-top: 0.1rem; }
 .log-content { flex: 1; font-size: 0.8rem; line-height: 1.4; }
 .log-actor   { font-family: var(--font-heading); color: var(--gold-dim); font-size: 0.7rem; margin-right: 0.3rem; }
-.log-message { color: var(--parchment); }
+.log-message { color: var(--parchment); white-space: pre-line; }
 .log-time    { font-size: 0.65rem; color: var(--parchment-dim); white-space: nowrap; flex-shrink: 0; }
 
 .log-entry--turn {
@@ -454,6 +454,7 @@ body.sheet-page {
   font-style: italic;
   color: var(--parchment);
   line-height: 1.5;
+  white-space: pre-line;
 }
 .log-entry--turn .log-time {
   font-size: 0.65rem;
