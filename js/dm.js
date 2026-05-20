@@ -1344,6 +1344,15 @@ function renderEncounterSidebar() {
           <input class="dm-input" type="number" id="dmEncHpMax" placeholder="Max" min="1" />
           <button class="dm-btn dm-btn-heal dm-btn-sm" id="dmEncAddBtn">+</button>
         </div>
+        <div class="dm-enc-size-row" id="dmEncSizeRow">
+          <span class="dm-enc-size-label">Size</span>
+          <input class="dm-input dm-enc-size-input" type="number" id="dmEncSizeX"
+            placeholder="W" min="1" max="10" value="1" />
+          <span class="dm-enc-hp-sep">×</span>
+          <input class="dm-input dm-enc-size-input" type="number" id="dmEncSizeY"
+            placeholder="H" min="1" max="10" value="1" />
+          <span class="dm-enc-size-unit">m</span>
+        </div>
       </div>
       <div class="dm-enc-list" id="dmEncList"></div>
     `;
@@ -1353,6 +1362,7 @@ function renderEncounterSidebar() {
         selectedEncType = btn.dataset.type;
         el.querySelectorAll(".dm-enc-filter-btn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
+        el.querySelector("#dmEncSizeRow").classList.toggle("hidden", selectedEncType !== "monster");
         renderEncounterList();
       });
     });
@@ -1367,17 +1377,25 @@ function renderEncounterSidebar() {
 }
 
 async function addEncounter(el) {
-  const name   = el.querySelector("#dmEncName").value.trim();
+  const name  = el.querySelector("#dmEncName").value.trim();
   if (!name) { el.querySelector("#dmEncName").focus(); return; }
   const hp    = parseInt(el.querySelector("#dmEncHp").value)    || 10;
   const hpMax = parseInt(el.querySelector("#dmEncHpMax").value) || hp;
+  const sizeX = selectedEncType === "monster"
+    ? (Math.max(1, parseInt(el.querySelector("#dmEncSizeX")?.value) || 1)) : 1;
+  const sizeY = selectedEncType === "monster"
+    ? (Math.max(1, parseInt(el.querySelector("#dmEncSizeY")?.value) || 1)) : 1;
   await addDoc(collection(db, "monsters"), {
-    name, hp, hpMax, type: selectedEncType,
+    name, hp, hpMax, type: selectedEncType, sizeX, sizeY,
     createdAt: serverTimestamp(),
   });
-  el.querySelector("#dmEncName").value   = "";
-  el.querySelector("#dmEncHp").value     = "";
-  el.querySelector("#dmEncHpMax").value  = "";
+  el.querySelector("#dmEncName").value  = "";
+  el.querySelector("#dmEncHp").value    = "";
+  el.querySelector("#dmEncHpMax").value = "";
+  if (selectedEncType === "monster") {
+    el.querySelector("#dmEncSizeX").value = "1";
+    el.querySelector("#dmEncSizeY").value = "1";
+  }
   el.querySelector("#dmEncName").focus();
 }
 
@@ -1401,11 +1419,16 @@ function renderEncounterList() {
     const barColor = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
     const hpClass  = pct <= 30 ? "low" : pct <= 60 ? "mid" : "";
 
+    const sizeBadge = m.type === "monster"
+      ? `<span class="dm-enc-size-badge">${m.sizeX || 1}×${m.sizeY || 1}m</span>` : "";
+
     const card = document.createElement("div");
     card.className = "dm-enc-card";
+    card.draggable = true;
     card.innerHTML = `
       <div class="dm-enc-card-top">
         <span class="dm-enc-name">${m.name}</span>
+        ${sizeBadge}
         <button class="dm-btn-del dm-enc-del" title="Remove">✕</button>
       </div>
       <div class="dm-enc-bar-track">
@@ -1418,6 +1441,11 @@ function renderEncounterList() {
         <button class="dm-btn dm-btn-heal   dm-btn-sm dm-enc-heal">Heal</button>
       </div>
     `;
+
+    card.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("monsterId", m.id);
+      e.dataTransfer.effectAllowed = "copy";
+    });
 
     const mRef     = doc(db, "monsters", m.id);
     const amtInput = card.querySelector(".dm-enc-amt");
@@ -1662,50 +1690,87 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
   const hPct = (1 / rows) * 100;
 
   tokens.forEach(token => {
-    const char = characters[token.charId];
-    if (!char) return;
-    const pct       = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
-    const ringColor = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
-    const portrait  = char.portrait || null;
-    const fallback  = char.emoji || "⚔️";
+    let div;
 
-    const div = document.createElement("div");
-    div.className  = "dm-scene-token";
-    div.style.left   = `${(token.x / cols) * 100}%`;
-    div.style.top    = `${(token.y / rows) * 100}%`;
-    div.style.width  = `${wPct}%`;
-    div.style.height = `${hPct}%`;
+    if (token.charId) {
+      const char = characters[token.charId];
+      if (!char) return;
+      const pct       = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
+      const ringColor = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
+      const portrait  = char.portrait || null;
+      const fallback  = char.emoji || "⚔️";
 
-    // Bubble: portrait thumbnail + name (always visible, floats above marker)
-    const bubblePortraitHTML = portrait
-      ? `<img src="${portrait}" class="dm-scene-bubble-img" alt="${char.name}" />`
-      : `<span class="dm-scene-bubble-emoji">${fallback}</span>`;
+      div = document.createElement("div");
+      div.className    = "dm-scene-token";
+      div.style.left   = `${(token.x / cols) * 100}%`;
+      div.style.top    = `${(token.y / rows) * 100}%`;
+      div.style.width  = `${wPct}%`;
+      div.style.height = `${hPct}%`;
+      div.innerHTML = `
+        <div class="dm-scene-token-bubble">
+          ${portrait
+            ? `<img src="${portrait}" class="dm-scene-bubble-img" alt="${char.name}" />`
+            : `<span class="dm-scene-bubble-emoji">${fallback}</span>`}
+          <span class="dm-scene-bubble-name">${char.name || "?"}</span>
+        </div>
+        <div class="dm-scene-token-marker" style="border-color:${ringColor}">
+          ${portrait
+            ? `<img src="${portrait}" class="dm-scene-marker-img" alt="${char.name}" />`
+            : `<span class="dm-scene-marker-emoji">${fallback}</span>`}
+        </div>
+        <button class="dm-scene-token-remove" title="Remove">✕</button>
+      `;
+      div.querySelector(".dm-scene-token-remove").addEventListener("click", async e => {
+        e.stopPropagation();
+        const cur = scenes[locId]?.[sceneKey];
+        if (!cur) return;
+        await saveScene(locId, sceneKey, {
+          ...cur,
+          tokens: (cur.tokens || []).filter(
+            t => !(t.charId === token.charId && t.x === token.x && t.y === token.y)
+          ),
+        });
+      });
 
-    // Marker: circular portrait pin on the grid cell
-    const markerHTML = portrait
-      ? `<img src="${portrait}" class="dm-scene-marker-img" alt="${char.name}" />`
-      : `<span class="dm-scene-marker-emoji">${fallback}</span>`;
+    } else if (token.monsterId) {
+      const m = monsters[token.monsterId];
+      if (!m) return;
+      const sizeX     = token.sizeX || 1;
+      const sizeY     = token.sizeY || 1;
+      const pct       = m.hpMax ? Math.round(((m.hp ?? 0) / m.hpMax) * 100) : 100;
+      const ringColor = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
+      const icon      = m.type === "npc" ? "👤" : "💀";
 
-    div.innerHTML = `
-      <div class="dm-scene-token-bubble">
-        ${bubblePortraitHTML}
-        <span class="dm-scene-bubble-name">${char.name || "?"}</span>
-      </div>
-      <div class="dm-scene-token-marker" style="border-color:${ringColor}">
-        ${markerHTML}
-      </div>
-      <button class="dm-scene-token-remove" title="Remove">✕</button>
-    `;
-
-    div.querySelector(".dm-scene-token-remove").addEventListener("click", async e => {
-      e.stopPropagation();
-      const cur = scenes[locId]?.[sceneKey];
-      if (!cur) return;
-      const newTokens = (cur.tokens || []).filter(
-        t => !(t.charId === token.charId && t.x === token.x && t.y === token.y)
-      );
-      await saveScene(locId, sceneKey, { ...cur, tokens: newTokens });
-    });
+      div = document.createElement("div");
+      div.className    = "dm-scene-token";
+      div.style.left   = `${(token.x / cols) * 100}%`;
+      div.style.top    = `${(token.y / rows) * 100}%`;
+      div.style.width  = `${(sizeX / cols) * 100}%`;
+      div.style.height = `${(sizeY / rows) * 100}%`;
+      div.innerHTML = `
+        <div class="dm-scene-token-bubble">
+          <span class="dm-scene-bubble-emoji">${icon}</span>
+          <span class="dm-scene-bubble-name">${m.name || "?"}</span>
+        </div>
+        <div class="dm-scene-token-marker dm-scene-token-marker--enc" style="border-color:${ringColor}">
+          <span class="dm-scene-marker-emoji">${icon}</span>
+        </div>
+        <button class="dm-scene-token-remove" title="Remove">✕</button>
+      `;
+      div.querySelector(".dm-scene-token-remove").addEventListener("click", async e => {
+        e.stopPropagation();
+        const cur = scenes[locId]?.[sceneKey];
+        if (!cur) return;
+        await saveScene(locId, sceneKey, {
+          ...cur,
+          tokens: (cur.tokens || []).filter(
+            t => !(t.monsterId === token.monsterId && t.x === token.x && t.y === token.y)
+          ),
+        });
+      });
+    } else {
+      return;
+    }
 
     tokenLayer.appendChild(div);
   });
@@ -1726,17 +1791,30 @@ function setupTokenDropZone(tokenLayer, widthM, heightM, locId, sceneKey) {
   tokenLayer.addEventListener("drop", async e => {
     e.preventDefault();
     tokenLayer.classList.remove("drag-over");
-    const charId = e.dataTransfer.getData("charId");
-    if (!charId) return;
-    const rect  = tokenLayer.getBoundingClientRect();
-    const relX  = (e.clientX - rect.left)  / rect.width;
-    const relY  = (e.clientY - rect.top)   / rect.height;
-    const x     = Math.max(0, Math.min(cols - 1, Math.floor(relX * cols)));
-    const y     = Math.max(0, Math.min(rows - 1, Math.floor(relY * rows)));
-    const cur   = scenes[locId]?.[sceneKey];
+    const charId    = e.dataTransfer.getData("charId");
+    const monsterId = e.dataTransfer.getData("monsterId");
+    if (!charId && !monsterId) return;
+
+    const rect = tokenLayer.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top)  / rect.height;
+    const cur  = scenes[locId]?.[sceneKey];
     if (!cur) return;
-    const existing = (cur.tokens || []).filter(t => t.charId !== charId);
-    await saveScene(locId, sceneKey, { ...cur, tokens: [...existing, { charId, x, y }] });
+
+    if (charId) {
+      const x = Math.max(0, Math.min(cols - 1, Math.floor(relX * cols)));
+      const y = Math.max(0, Math.min(rows - 1, Math.floor(relY * rows)));
+      const existing = (cur.tokens || []).filter(t => t.charId !== charId);
+      await saveScene(locId, sceneKey, { ...cur, tokens: [...existing, { charId, x, y }] });
+    } else {
+      const m     = monsters[monsterId];
+      const sizeX = m?.sizeX || 1;
+      const sizeY = m?.sizeY || 1;
+      const x = Math.max(0, Math.min(cols - sizeX, Math.floor(relX * cols)));
+      const y = Math.max(0, Math.min(rows - sizeY, Math.floor(relY * rows)));
+      const existing = (cur.tokens || []).filter(t => t.monsterId !== monsterId);
+      await saveScene(locId, sceneKey, { ...cur, tokens: [...existing, { monsterId, x, y, sizeX, sizeY }] });
+    }
   });
 }
 

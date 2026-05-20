@@ -1073,6 +1073,47 @@
   flex-shrink: 0;
 }
 
+.dm-enc-size-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+.dm-enc-size-row.hidden { display: none; }
+.dm-enc-size-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6a5a4a;
+  flex-shrink: 0;
+}
+.dm-enc-size-input {
+  width: 36px !important;
+  padding: 0.28rem 0.3rem !important;
+  font-size: 0.8rem !important;
+  text-align: center;
+  flex-shrink: 0;
+  min-width: unset !important;
+}
+.dm-enc-size-unit {
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.75rem;
+  color: #5a4a3a;
+  flex-shrink: 0;
+}
+.dm-enc-size-badge {
+  font-family: 'Cinzel', serif;
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  color: #7a6a5a;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid #2a0505;
+  border-radius: 3px;
+  padding: 0.05rem 0.3rem;
+  flex-shrink: 0;
+}
+
 /* ── Spells Tab ──────────────────────────────────────────── */
 .dm-spells-hint {
   font-family: 'Crimson Pro', serif;
@@ -1364,6 +1405,11 @@
   letter-spacing: 0.04em;
   line-height: 1;
   text-align: center;
+}
+
+/* Monster/NPC marker — rectangle instead of circle */
+.dm-scene-token-marker--enc {
+  border-radius: 6px;
 }
 
 /* Remove button (hover) */
