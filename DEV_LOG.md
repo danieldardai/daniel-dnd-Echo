@@ -87,6 +87,17 @@ Reference this before modifying any system to understand context and constraints
 - **`css/style.css`** (uncommitted): added `.location-section`, `.location-section-header`, `.location-section-name`, `.location-section-desc`, `.location-card-grid`, responsive breakpoints
 - **`patch-spells.mjs`** (new, uncommitted): Node/Firebase-Admin script to bulk-patch spell + spellSlot data into Firestore for 8 characters (Korrath, Zeth, Lirien, Seraphine, Mara, Torvin, Finn, Sylvara)
 
+### Session 7 — General Actions narrate interface
+- **`js/sheet.js`:** Replaced direct-log general action buttons with a narrate workflow:
+  - Textarea at top of General Actions column for free-form input (English/Hungarian/mixed)
+  - `✨ Narrate` send button calls `callClaudeAction()` → Claude outputs `🇬🇧 English` + `🇭🇺 Hungarian` versions → logged to `sessionLog`
+  - 10 quick-action buttons (Search, Reveal, Heal, Dash, Dodge, Help, Hide, Ready, Disengage, Stabilize) now prefill the textarea with a first-person sentence instead of firing immediately; player edits then sends
+  - Ctrl/Cmd+Enter keyboard shortcut to send
+  - API key prompt on first use (same `localStorage["ebClaudeApiKey"]` as DM panel)
+  - Status line shows `✨ Narrating…` while awaiting API, error message on failure
+- **`css/sheet.css`:** Added `.action-narrate-textarea`, `.action-narrate-send-row`, `.action-narrate-status`, `.btn-narrate` (purple/arcane theme), `.action-narrate-divider`, `.action-narrate-grid`, `.action-narrate-btn`, `.action-narrate-icon`, `.action-narrate-name`
+- **`callClaudeAction(text, charName)`** added in `sheet.js` — same model (`claude-haiku-4-5-20251001`) and key storage as DM's `callClaude()`; prompt instructs bilingual output in `🇬🇧 / 🇭🇺` format
+
 ---
 
 ## Important Architecture Notes

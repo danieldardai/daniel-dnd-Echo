@@ -429,19 +429,50 @@ function showRollResult(rolls, total, formula, isCrit, isFumble) {
   `;
 }
 
+// ---- Claude API helpers (shared key with DM panel) -------------------------
+
+function getClaudeApiKey() {
+  return localStorage.getItem("ebClaudeApiKey") || "";
+}
+
+async function callClaudeAction(text, charName) {
+  const apiKey = getClaudeApiKey();
+  if (!apiKey) throw new Error("No API key configured");
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      messages: [{
+        role: "user",
+        content: `You are a narrative assistant for "Echoes Beneath," a dark fantasy tabletop RPG. The player controlling ${charName} described their character's action. The input may be in English, Hungarian, or a mixture of both — accept all of these. Correct any typos, understand the intent, and write a vivid 1-2 sentence in-character action description in both languages.\n\nPlayer input: "${text}"\n\nRespond in exactly this format (no extra commentary):\n🇬🇧 [English description, 1-2 sentences]\n🇭🇺 [Hungarian description, 1-2 sentences]`,
+      }],
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || `API error ${response.status}`);
+  return data.content[0].text.trim();
+}
+
 // ---- Actions tab: three columns -------------------------------------------
 
 const GENERAL_ACTIONS = [
-  { name: "Search",     icon: "🔍", desc: "Examine area for hidden things" },
-  { name: "Reveal",     icon: "👁️",  desc: "Expose a hidden creature or object" },
-  { name: "Heal",       icon: "💚", desc: "Spend a hit die to recover HP" },
-  { name: "Dash",       icon: "💨", desc: "Double movement this turn" },
-  { name: "Dodge",      icon: "🛡️",  desc: "Focus on avoiding attacks" },
-  { name: "Help",       icon: "🤝", desc: "Aid another creature's check" },
-  { name: "Hide",       icon: "👤", desc: "Attempt to become hidden" },
-  { name: "Ready",      icon: "⏳", desc: "Prepare a reaction trigger" },
-  { name: "Disengage",  icon: "🏃", desc: "Move without provoking attacks" },
-  { name: "Stabilize",  icon: "❤️", desc: "Stabilize a dying creature" },
+  { name: "Search",    icon: "🔍", prefill: "I examine the area carefully, searching for anything hidden or out of place." },
+  { name: "Reveal",    icon: "👁️",  prefill: "I expose what has been concealed, bringing it into the open." },
+  { name: "Heal",      icon: "💚", prefill: "I tend to my wounds, spending a moment to recover my strength." },
+  { name: "Dash",      icon: "💨", prefill: "I sprint forward with all my speed, covering ground quickly." },
+  { name: "Dodge",     icon: "🛡️",  prefill: "I focus entirely on staying out of harm's way." },
+  { name: "Help",      icon: "🤝", prefill: "I lend my aid to an ally, helping them succeed." },
+  { name: "Hide",      icon: "👤", prefill: "I slip into the shadows, attempting to conceal myself from sight." },
+  { name: "Ready",     icon: "⏳", prefill: "I prepare myself, ready to act the moment the right opportunity arises." },
+  { name: "Disengage", icon: "🏃", prefill: "I carefully break away from the fight, avoiding any opportunity attacks." },
+  { name: "Stabilize", icon: "❤️", prefill: "I rush to a fallen ally and do my best to keep them alive." },
 ];
 
 function makeActionCard(icon, name, desc, onClick, disabled = false) {
@@ -461,18 +492,86 @@ function makeActionCard(icon, name, desc, onClick, disabled = false) {
 
 function renderGeneralActions() {
   generalActionsCol.innerHTML = "";
+
+  // Textarea
+  const textarea = document.createElement("textarea");
+  textarea.className = "action-narrate-textarea";
+  textarea.placeholder = "Describe your action… (English, Hungarian, or both)";
+  textarea.rows = 3;
+  generalActionsCol.appendChild(textarea);
+
+  // Send row
+  const sendRow = document.createElement("div");
+  sendRow.className = "action-narrate-send-row";
+  const statusEl = document.createElement("span");
+  statusEl.className = "action-narrate-status";
+  const sendBtn = document.createElement("button");
+  sendBtn.className = "action-btn btn-narrate";
+  sendBtn.textContent = "✨ Narrate";
+  sendRow.appendChild(statusEl);
+  sendRow.appendChild(sendBtn);
+  generalActionsCol.appendChild(sendRow);
+
+  // Divider
+  const divider = document.createElement("div");
+  divider.className = "action-narrate-divider";
+  divider.textContent = "Quick actions";
+  generalActionsCol.appendChild(divider);
+
+  // Prefill buttons grid
+  const grid = document.createElement("div");
+  grid.className = "action-narrate-grid";
   GENERAL_ACTIONS.forEach(action => {
-    generalActionsCol.appendChild(makeActionCard(
-      action.icon, action.name, action.desc,
-      async () => {
-        await addDoc(collection(db, "sessionLog"), {
-          type: "action", actor: currentData.name,
-          message: `${currentData.name} used ${action.name}`,
-          charId, timestamp: serverTimestamp()
-        });
-        toast(`${action.icon} ${action.name}`);
-      }
-    ));
+    const btn = document.createElement("button");
+    btn.className = "action-narrate-btn";
+    btn.innerHTML = `<span class="action-narrate-icon">${action.icon}</span><span class="action-narrate-name">${action.name}</span>`;
+    btn.addEventListener("click", () => {
+      textarea.value = action.prefill;
+      textarea.focus();
+      textarea.setSelectionRange(0, textarea.value.length);
+    });
+    grid.appendChild(btn);
+  });
+  generalActionsCol.appendChild(grid);
+
+  // Send on click
+  sendBtn.addEventListener("click", async () => {
+    const text = textarea.value.trim();
+    if (!text) { textarea.focus(); return; }
+
+    let apiKey = getClaudeApiKey();
+    if (!apiKey) {
+      apiKey = prompt("Enter your Anthropic API key (stored locally in this browser only):");
+      if (!apiKey) return;
+      localStorage.setItem("ebClaudeApiKey", apiKey.trim());
+    }
+
+    sendBtn.disabled = true;
+    statusEl.textContent = "✨ Narrating…";
+
+    try {
+      const result = await callClaudeAction(text, currentData.name || "the hero");
+      await addDoc(collection(db, "sessionLog"), {
+        type: "action", actor: currentData.name,
+        message: result,
+        charId, timestamp: serverTimestamp(),
+      });
+      textarea.value = "";
+      statusEl.textContent = "";
+      toast("✨ Action narrated!");
+    } catch (err) {
+      statusEl.textContent = "⚠ " + err.message;
+    } finally {
+      sendBtn.disabled = false;
+    }
+  });
+
+  // Ctrl/Cmd+Enter to send
+  textarea.addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      sendBtn.click();
+    }
   });
 }
 
