@@ -87,6 +87,19 @@ Reference this before modifying any system to understand context and constraints
 - **`css/style.css`** (uncommitted): added `.location-section`, `.location-section-header`, `.location-section-name`, `.location-section-desc`, `.location-card-grid`, responsive breakpoints
 - **`patch-spells.mjs`** (new, uncommitted): Node/Firebase-Admin script to bulk-patch spell + spellSlot data into Firestore for 8 characters (Korrath, Zeth, Lirien, Seraphine, Mara, Torvin, Finn, Sylvara)
 
+### Session 8 — Encounter sidebar: Monsters & NPCs
+- **`index.html`:** Added `<div class="dm-encounter-sidebar" id="dmEncounterSidebar">` as a third column inside `.dm-body` (right of dm-main)
+- **`js/dm.js`:**
+  - New state: `monsters {}`, `selectedEncType` ("monster"|"npc"), `unsubMonsters`
+  - `startListening()` now also subscribes to `monsters` collection (ordered by `createdAt`)
+  - `renderEncounterSidebar()` — builds shell once (filter buttons + add form), then calls `renderEncounterList()`
+  - `addEncounter()` — writes to `monsters` collection with name, hp, hpMax, type, createdAt
+  - `renderEncounterList()` — renders HP bar + Dmg/Heal controls per entry; damage logs to `sessionLog`
+  - Delete button with confirm dialog calls `deleteDoc`
+- **`css/dm.css`:** Added `.dm-encounter-sidebar` (200px right sidebar), `.dm-enc-header`, `.dm-enc-filter-btn`, `.dm-enc-add`, `.dm-enc-hp-row`, `.dm-enc-list`, `.dm-enc-card`, `.dm-enc-bar-track`, `.dm-enc-actions`, `.dm-enc-amt`
+- **`patch-monsters.mjs`:** Seeds 4 monsters (Goblin Scout, Orc Warrior, Shadow Wraith, Giant Spider) and 4 NPCs (Torven the Innkeeper, Guard Captain Mira, The Mysterious Stranger, Elder Morthis)
+- **Firestore:** Requires `monsters` collection with `allow read, write: if true` rule
+
 ### Session 7 — General Actions narrate interface
 - **`js/sheet.js`:** Replaced direct-log general action buttons with a narrate workflow:
   - Textarea at top of General Actions column for free-form input (English/Hungarian/mixed)

@@ -103,13 +103,16 @@ const PHASE_ICONS = {
 // ── State ─────────────────────────────────────────────────
 let characters       = {};
 let locations        = {};
+let monsters         = {};          // id → monster/npc doc
 let allTurnStates    = {};          // locationId → turnData
-let selectedTurnLocId = "__global__"; // which location the strip is managing
+let selectedTurnLocId = "__global__";
 let selectedCharId   = null;
+let selectedEncType  = "monster";   // "monster" | "npc"
 let dmUnlocked       = false;
 let unsubCharacters  = null;
 let unsubLocations   = null;
 let unsubTurn        = null;
+let unsubMonsters    = null;
 
 // ── DOM refs ──────────────────────────────────────────────
 const dmBtn            = document.getElementById("dmBtn");
@@ -500,6 +503,22 @@ function startListening() {
       });
       renderTurnStrip();
     }, () => renderTurnStrip());
+  }
+
+  // Monsters / NPCs listener
+  if (!unsubMonsters) {
+    unsubMonsters = onSnapshot(
+      query(collection(db, "monsters"), orderBy("createdAt")),
+      snap => {
+        snap.docChanges().forEach(change => {
+          const id = change.doc.id;
+          if (change.type === "removed") delete monsters[id];
+          else monsters[id] = { id, ...change.doc.data() };
+        });
+        renderEncounterSidebar();
+      },
+      () => renderEncounterSidebar()
+    );
   }
 }
 
@@ -1274,6 +1293,137 @@ function makeLocColumn(locId, emoji, name, locData, chars) {
   col.appendChild(header);
   col.appendChild(dropZone);
   return col;
+}
+
+// ── ENCOUNTER SIDEBAR (Monsters / NPCs) ──────────────────
+
+function renderEncounterSidebar() {
+  const el = document.getElementById("dmEncounterSidebar");
+  if (!el) return;
+
+  // Build shell once
+  if (!el.querySelector(".dm-enc-list")) {
+    el.innerHTML = `
+      <div class="dm-enc-header">
+        <button class="dm-enc-filter-btn active" data-type="monster">⚔️ Monsters</button>
+        <button class="dm-enc-filter-btn" data-type="npc">💬 NPCs</button>
+      </div>
+      <div class="dm-enc-add">
+        <input class="dm-input dm-enc-name-input" id="dmEncName" placeholder="Name" />
+        <div class="dm-enc-hp-row">
+          <input class="dm-input" type="number" id="dmEncHp"    placeholder="HP"  min="1" />
+          <span class="dm-enc-hp-sep">/</span>
+          <input class="dm-input" type="number" id="dmEncHpMax" placeholder="Max" min="1" />
+          <button class="dm-btn dm-btn-heal dm-btn-sm" id="dmEncAddBtn">+</button>
+        </div>
+      </div>
+      <div class="dm-enc-list" id="dmEncList"></div>
+    `;
+
+    el.querySelectorAll(".dm-enc-filter-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        selectedEncType = btn.dataset.type;
+        el.querySelectorAll(".dm-enc-filter-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        renderEncounterList();
+      });
+    });
+
+    el.querySelector("#dmEncAddBtn").addEventListener("click", () => addEncounter(el));
+    el.querySelector("#dmEncName").addEventListener("keydown", e => {
+      if (e.key === "Enter") addEncounter(el);
+    });
+  }
+
+  renderEncounterList();
+}
+
+async function addEncounter(el) {
+  const name   = el.querySelector("#dmEncName").value.trim();
+  if (!name) { el.querySelector("#dmEncName").focus(); return; }
+  const hp    = parseInt(el.querySelector("#dmEncHp").value)    || 10;
+  const hpMax = parseInt(el.querySelector("#dmEncHpMax").value) || hp;
+  await addDoc(collection(db, "monsters"), {
+    name, hp, hpMax, type: selectedEncType,
+    createdAt: serverTimestamp(),
+  });
+  el.querySelector("#dmEncName").value   = "";
+  el.querySelector("#dmEncHp").value     = "";
+  el.querySelector("#dmEncHpMax").value  = "";
+  el.querySelector("#dmEncName").focus();
+}
+
+function renderEncounterList() {
+  const listEl = document.getElementById("dmEncList");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+
+  const filtered = Object.values(monsters)
+    .filter(m => m.type === selectedEncType)
+    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
+
+  if (!filtered.length) {
+    const label = selectedEncType === "monster" ? "monsters" : "NPCs";
+    listEl.innerHTML = `<div class="dm-empty">No ${label} yet.</div>`;
+    return;
+  }
+
+  filtered.forEach(m => {
+    const pct      = m.hpMax ? Math.min(100, Math.max(0, Math.round((m.hp / m.hpMax) * 100))) : 100;
+    const barColor = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
+    const hpClass  = pct <= 30 ? "low" : pct <= 60 ? "mid" : "";
+
+    const card = document.createElement("div");
+    card.className = "dm-enc-card";
+    card.innerHTML = `
+      <div class="dm-enc-card-top">
+        <span class="dm-enc-name">${m.name}</span>
+        <button class="dm-btn-del dm-enc-del" title="Remove">✕</button>
+      </div>
+      <div class="dm-enc-bar-track">
+        <div class="dm-enc-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+      </div>
+      <div class="dm-enc-hp-label dm-char-hp ${hpClass}">${m.hp} / ${m.hpMax} HP</div>
+      <div class="dm-enc-actions">
+        <input type="number" class="dm-input dm-enc-amt" placeholder="Amt" min="1" />
+        <button class="dm-btn dm-btn-damage dm-btn-sm dm-enc-dmg">Dmg</button>
+        <button class="dm-btn dm-btn-heal   dm-btn-sm dm-enc-heal">Heal</button>
+      </div>
+    `;
+
+    const mRef     = doc(db, "monsters", m.id);
+    const amtInput = card.querySelector(".dm-enc-amt");
+
+    card.querySelector(".dm-enc-dmg").addEventListener("click", async () => {
+      const amt = parseInt(amtInput.value) || 0;
+      if (!amt) return;
+      const cur   = monsters[m.id]?.hp ?? 0;
+      const newHp = Math.max(0, cur - amt);
+      await updateDoc(mRef, { hp: newHp });
+      await addDoc(collection(db, "sessionLog"), {
+        type: "damage", actor: "DM",
+        message: `${m.name} took ${amt} damage (${newHp}/${m.hpMax} HP)`,
+        timestamp: serverTimestamp(), charId: null,
+      });
+      amtInput.value = "";
+    });
+
+    card.querySelector(".dm-enc-heal").addEventListener("click", async () => {
+      const amt = parseInt(amtInput.value) || 0;
+      if (!amt) return;
+      const cur   = monsters[m.id]?.hp ?? 0;
+      const newHp = Math.min(m.hpMax, cur + amt);
+      await updateDoc(mRef, { hp: newHp });
+      amtInput.value = "";
+    });
+
+    card.querySelector(".dm-enc-del").addEventListener("click", async () => {
+      if (!confirm(`Remove "${m.name}"?`)) return;
+      await deleteDoc(doc(db, "monsters", m.id));
+    });
+
+    listEl.appendChild(card);
+  });
 }
 
 function makeCharChip(char) {
