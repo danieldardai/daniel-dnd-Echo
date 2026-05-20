@@ -1239,10 +1239,46 @@
 }
 .dm-scene-loc-sel { flex: 1; max-width: 260px; }
 
+/* Location section wrapper */
+.dm-scene-section {
+  margin-bottom: 1.4rem;
+  border: 1px solid #2a0505;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.dm-scene-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.7rem;
+  background: rgba(0,0,0,0.3);
+  border-bottom: 1px solid #2a0505;
+  flex-shrink: 0;
+}
+.dm-scene-section-emoji { font-size: 1rem; flex-shrink: 0; }
+.dm-scene-section-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  color: #e8d5b7;
+  letter-spacing: 0.06em;
+  flex: 1;
+}
+.dm-scene-section-desc {
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.7rem;
+  color: #5a4a3a;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
 .dm-scene-panels {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.9rem;
+  padding: 0.6rem;
 }
 
 .dm-scene-panel {
@@ -1251,8 +1287,8 @@
   gap: 0.45rem;
   background: rgba(255,255,255,0.02);
   border: 1px solid #2a0505;
-  border-radius: 6px;
-  padding: 0.6rem;
+  border-radius: 4px;
+  padding: 0.5rem;
 }
 
 .dm-scene-panel-header {

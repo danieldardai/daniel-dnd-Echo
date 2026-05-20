@@ -540,13 +540,8 @@ function startListening() {
 // ── Character sidebar ─────────────────────────────────────
 function renderCharList() {
   dmCharList.innerHTML = "";
-  let chars = Object.values(characters)
+  const chars = Object.values(characters)
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-
-  // When Scenes tab is active, only show characters at that location
-  if (activeTab() === "scenes" && selectedSceneLocId) {
-    chars = chars.filter(c => c.locationId === selectedSceneLocId);
-  }
 
   chars.forEach(char => {
       const btn = document.createElement("button");
@@ -1523,41 +1518,39 @@ function renderScenesTab() {
     return;
   }
 
-  if (!selectedSceneLocId || !locations[selectedSceneLocId]) {
-    selectedSceneLocId = sortedLocs[0].id;
-  }
+  el.innerHTML = "";
 
-  const sceneDoc = scenes[selectedSceneLocId] || {};
+  sortedLocs.forEach(loc => {
+    const sceneDoc = scenes[loc.id] || {};
 
-  el.innerHTML = `
-    <div class="dm-scene-loc-selector">
-      <label class="dm-scene-loc-label">Location</label>
-      <select class="dm-input dm-scene-loc-sel" id="dmSceneLocSel">
-        ${sortedLocs.map(loc => `
-          <option value="${loc.id}" ${loc.id === selectedSceneLocId ? "selected" : ""}>
-            ${loc.emoji || "🗺️"} ${loc.name}
-          </option>
-        `).join("")}
-      </select>
-    </div>
-    <div class="dm-scene-panels" id="dmScenePanels"></div>
-  `;
+    const section = document.createElement("div");
+    section.className = "dm-scene-section";
 
-  el.querySelector("#dmSceneLocSel").addEventListener("change", e => {
-    selectedSceneLocId = e.target.value;
-    renderScenesTab();
-    renderCharList();
+    const header = document.createElement("div");
+    header.className = "dm-scene-section-header";
+    header.innerHTML = `
+      <span class="dm-scene-section-emoji">${loc.emoji || "🗺️"}</span>
+      <span class="dm-scene-section-name">${loc.name}</span>
+      ${loc.description ? `<span class="dm-scene-section-desc">${loc.description}</span>` : ""}
+    `;
+
+    const panels = document.createElement("div");
+    panels.className = "dm-scene-panels";
+
+    const curPanel  = document.createElement("div");
+    curPanel.className = "dm-scene-panel";
+    const nextPanel = document.createElement("div");
+    nextPanel.className = "dm-scene-panel";
+
+    buildScenePanel(curPanel,  loc.id, "current", sceneDoc.current || null);
+    buildScenePanel(nextPanel, loc.id, "next",    sceneDoc.next    || null);
+
+    panels.appendChild(curPanel);
+    panels.appendChild(nextPanel);
+    section.appendChild(header);
+    section.appendChild(panels);
+    el.appendChild(section);
   });
-
-  const panelsEl = el.querySelector("#dmScenePanels");
-  const curPanel  = document.createElement("div");
-  curPanel.className = "dm-scene-panel";
-  const nextPanel = document.createElement("div");
-  nextPanel.className = "dm-scene-panel";
-  buildScenePanel(curPanel,  selectedSceneLocId, "current", sceneDoc.current || null);
-  buildScenePanel(nextPanel, selectedSceneLocId, "next",    sceneDoc.next    || null);
-  panelsEl.appendChild(curPanel);
-  panelsEl.appendChild(nextPanel);
 }
 
 function buildScenePanel(container, locId, sceneKey, sceneData) {
