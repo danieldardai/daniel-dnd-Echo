@@ -1180,3 +1180,185 @@
   border-color: rgba(192,57,27,0.5);
   color: #e07060;
 }
+
+/* ── Scenes Tab ──────────────────────────────────────────── */
+.dm-scene-loc-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+.dm-scene-loc-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6a5a4a;
+  white-space: nowrap;
+}
+.dm-scene-loc-sel { flex: 1; max-width: 260px; }
+
+.dm-scene-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+}
+
+.dm-scene-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid #2a0505;
+  border-radius: 6px;
+  padding: 0.6rem;
+}
+
+.dm-scene-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid #2a0505;
+  flex-shrink: 0;
+}
+.dm-scene-panel-title {
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9a8a7a;
+}
+
+/* Map wrapper: image + grid canvas + token layer stacked */
+.dm-scene-map-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  line-height: 0;
+  background: #080808;
+}
+.dm-scene-img {
+  width: 100%;
+  display: block;
+}
+.dm-scene-grid-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.dm-scene-token-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.dm-scene-token-layer.drag-over {
+  outline: 2px dashed #c0392b;
+  outline-offset: -2px;
+  background: rgba(192,57,43,0.06);
+}
+
+/* Tokens */
+.dm-scene-token {
+  position: absolute;
+  cursor: default;
+}
+.dm-scene-token-inner {
+  position: absolute;
+  inset: 10%;
+  border: 2px solid;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.dm-scene-token-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.55rem;
+  color: #e8d5b7;
+  line-height: 1;
+  user-select: none;
+}
+.dm-scene-token-remove {
+  display: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  background: #8b0000;
+  border: 1px solid #c0392b;
+  border-radius: 50%;
+  color: #e8d5b7;
+  font-size: 0.5rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 10;
+  line-height: 1;
+}
+.dm-scene-token:hover .dm-scene-token-remove { display: flex; }
+
+/* Scale row */
+.dm-scene-scale-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.dm-scene-scale-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: #7a6a5a;
+  white-space: nowrap;
+}
+.dm-scene-scale-input {
+  width: 58px !important;
+  text-align: center;
+  flex-shrink: 0 !important;
+  min-width: unset !important;
+}
+.dm-scene-height-display {
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.8rem;
+  color: #6a5a4a;
+  white-space: nowrap;
+}
+
+/* Upload area */
+.dm-scene-upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1.6rem 1rem;
+  border: 2px dashed #3a0808;
+  border-radius: 6px;
+  text-align: center;
+  min-height: 110px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.dm-scene-upload-area:hover,
+.dm-scene-upload-area.drag-over {
+  border-color: #8b2020;
+  background: rgba(139,32,32,0.06);
+}
+.dm-scene-upload-icon { font-size: 1.8rem; }
+.dm-scene-upload-hint {
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.82rem;
+  color: #6a5a4a;
+  font-style: italic;
+}
+.dm-scene-file-input { display: none; }
+.dm-scene-upload-btn { cursor: pointer; }

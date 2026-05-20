@@ -101,18 +101,21 @@ const PHASE_ICONS = {
 };
 
 // ── State ─────────────────────────────────────────────────
-let characters       = {};
-let locations        = {};
-let monsters         = {};          // id → monster/npc doc
-let allTurnStates    = {};          // locationId → turnData
-let selectedTurnLocId = "__global__";
-let selectedCharId   = null;
-let selectedEncType  = "monster";   // "monster" | "npc"
-let dmUnlocked       = false;
-let unsubCharacters  = null;
-let unsubLocations   = null;
-let unsubTurn        = null;
-let unsubMonsters    = null;
+let characters        = {};
+let locations         = {};
+let monsters          = {};          // id → monster/npc doc
+let scenes            = {};          // locId → { current, next }
+let allTurnStates     = {};          // locationId → turnData
+let selectedTurnLocId  = "__global__";
+let selectedCharId    = null;
+let selectedEncType   = "monster";   // "monster" | "npc"
+let selectedSceneLocId = null;
+let dmUnlocked        = false;
+let unsubCharacters   = null;
+let unsubLocations    = null;
+let unsubTurn         = null;
+let unsubMonsters     = null;
+let unsubScenes       = null;
 
 // ── DOM refs ──────────────────────────────────────────────
 const dmBtn            = document.getElementById("dmBtn");
@@ -520,6 +523,18 @@ function startListening() {
       () => renderEncounterSidebar()
     );
   }
+
+  // Scenes listener
+  if (!unsubScenes) {
+    unsubScenes = onSnapshot(collection(db, "scenes"), snap => {
+      snap.docChanges().forEach(change => {
+        const id = change.doc.id;
+        if (change.type === "removed") delete scenes[id];
+        else scenes[id] = { id, ...change.doc.data() };
+      });
+      if (activeTab() === "scenes") renderScenesTab();
+    }, () => {});
+  }
 }
 
 // ── Character sidebar ─────────────────────────────────────
@@ -540,6 +555,11 @@ function renderCharList() {
         selectedCharId = char.id;
         renderCharList();
         renderActiveTab();
+      });
+      btn.draggable = true;
+      btn.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("charId", char.id);
+        e.dataTransfer.effectAllowed = "copy";
       });
       dmCharList.appendChild(btn);
     });
@@ -563,6 +583,7 @@ function activeTab() {
 function renderActiveTab() {
   const tab  = activeTab();
   if (tab === "locations") { renderLocationsTab(); return; }
+  if (tab === "scenes")    { renderScenesTab();    return; }
 
   const char = selectedCharId ? characters[selectedCharId] : null;
   if (!char) {
@@ -1454,4 +1475,274 @@ function makeCharChip(char) {
   chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
 
   return chip;
+}
+
+// ── SCENES TAB ────────────────────────────────────────────
+
+function renderScenesTab() {
+  const el = document.getElementById("dm-tab-scenes");
+  const sortedLocs = Object.values(locations).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  if (!sortedLocs.length) {
+    el.innerHTML = `<div class="dm-no-char">No locations yet — create locations first.</div>`;
+    return;
+  }
+
+  if (!selectedSceneLocId || !locations[selectedSceneLocId]) {
+    selectedSceneLocId = sortedLocs[0].id;
+  }
+
+  const sceneDoc = scenes[selectedSceneLocId] || {};
+
+  el.innerHTML = `
+    <div class="dm-scene-loc-selector">
+      <label class="dm-scene-loc-label">Location</label>
+      <select class="dm-input dm-scene-loc-sel" id="dmSceneLocSel">
+        ${sortedLocs.map(loc => `
+          <option value="${loc.id}" ${loc.id === selectedSceneLocId ? "selected" : ""}>
+            ${loc.emoji || "🗺️"} ${loc.name}
+          </option>
+        `).join("")}
+      </select>
+    </div>
+    <div class="dm-scene-panels" id="dmScenePanels"></div>
+  `;
+
+  el.querySelector("#dmSceneLocSel").addEventListener("change", e => {
+    selectedSceneLocId = e.target.value;
+    renderScenesTab();
+  });
+
+  const panelsEl = el.querySelector("#dmScenePanels");
+  const curPanel  = document.createElement("div");
+  curPanel.className = "dm-scene-panel";
+  const nextPanel = document.createElement("div");
+  nextPanel.className = "dm-scene-panel";
+  buildScenePanel(curPanel,  selectedSceneLocId, "current", sceneDoc.current || null);
+  buildScenePanel(nextPanel, selectedSceneLocId, "next",    sceneDoc.next    || null);
+  panelsEl.appendChild(curPanel);
+  panelsEl.appendChild(nextPanel);
+}
+
+function buildScenePanel(container, locId, sceneKey, sceneData) {
+  const labelText = sceneKey === "current" ? "Current Scene" : "Next Scene";
+  const icon      = sceneKey === "current" ? "⚔️" : "🔮";
+  const hasImage  = !!sceneData?.image;
+  const uid       = `${locId}-${sceneKey}`;
+
+  container.innerHTML = `
+    <div class="dm-scene-panel-header">
+      <span class="dm-scene-panel-title">${icon} ${labelText}</span>
+      ${hasImage ? `<button class="dm-btn-del dm-scene-clear-btn" title="Remove scene image">✕</button>` : ""}
+    </div>
+    ${hasImage ? `
+      <div class="dm-scene-map-wrap">
+        <img class="dm-scene-img" src="${sceneData.image}" alt="Scene map" id="sceneImg-${uid}" />
+        <canvas class="dm-scene-grid-canvas" id="sceneCanvas-${uid}"></canvas>
+        <div class="dm-scene-token-layer" id="sceneTokens-${uid}"></div>
+      </div>
+      <div class="dm-scene-scale-row">
+        <label class="dm-scene-scale-label">Width (m):</label>
+        <input class="dm-input dm-scene-scale-input" type="number" min="1" max="500" step="1"
+          id="scaleInput-${uid}" value="${sceneData.widthM || 20}" />
+        <span class="dm-scene-height-display" id="heightDisplay-${uid}">
+          × ${sceneData.heightM ? Math.round(sceneData.heightM) + " m" : "? m"}
+        </span>
+        <button class="dm-btn dm-btn-neutral dm-btn-sm" id="scaleApply-${uid}">Apply</button>
+      </div>
+    ` : `
+      <div class="dm-scene-upload-area" id="uploadArea-${uid}">
+        <span class="dm-scene-upload-icon">🗺️</span>
+        <span class="dm-scene-upload-hint">Drop image here or choose a file</span>
+        <input type="file" class="dm-scene-file-input" accept="image/*" id="fileInput-${uid}" />
+        <label class="dm-btn dm-btn-neutral dm-btn-sm dm-scene-upload-btn"
+          for="fileInput-${uid}">Choose Image</label>
+      </div>
+      <div class="dm-scene-scale-row">
+        <label class="dm-scene-scale-label">Width (m):</label>
+        <input class="dm-input dm-scene-scale-input" type="number" min="1" max="500" step="1"
+          id="scaleInput-${uid}" value="20" />
+        <span class="dm-scene-height-display" id="heightDisplay-${uid}">× ? m</span>
+      </div>
+    `}
+  `;
+
+  if (hasImage) {
+    const img       = container.querySelector(`#sceneImg-${uid}`);
+    const canvas    = container.querySelector(`#sceneCanvas-${uid}`);
+    const tokenLayer = container.querySelector(`#sceneTokens-${uid}`);
+    const widthM    = sceneData.widthM || 20;
+
+    const initScene = () => {
+      const natW   = img.naturalWidth;
+      const natH   = img.naturalHeight;
+      const heightM = widthM * (natH / natW);
+      const hd = container.querySelector(`#heightDisplay-${uid}`);
+      if (hd) hd.textContent = `× ${Math.round(heightM)} m`;
+      drawGrid(canvas, natW, natH, widthM);
+      renderTokens(tokenLayer, widthM, heightM, sceneData.tokens || [], locId, sceneKey);
+      setupTokenDropZone(tokenLayer, widthM, heightM, locId, sceneKey);
+    };
+
+    if (img.complete && img.naturalWidth > 0) initScene();
+    else img.onload = initScene;
+
+    container.querySelector(`#scaleApply-${uid}`).addEventListener("click", async () => {
+      const newWidthM = Math.max(1, parseFloat(container.querySelector(`#scaleInput-${uid}`).value) || 20);
+      if (!img.complete || !img.naturalWidth) return;
+      const natW    = img.naturalWidth;
+      const natH    = img.naturalHeight;
+      const newHeightM = newWidthM * (natH / natW);
+      const hd = container.querySelector(`#heightDisplay-${uid}`);
+      if (hd) hd.textContent = `× ${Math.round(newHeightM)} m`;
+      drawGrid(canvas, natW, natH, newWidthM);
+      const cur = scenes[locId]?.[sceneKey] || sceneData;
+      await saveScene(locId, sceneKey, { ...cur, widthM: newWidthM, heightM: newHeightM });
+    });
+
+    container.querySelector(".dm-scene-clear-btn")?.addEventListener("click", async () => {
+      if (!confirm("Remove this scene image and all its tokens?")) return;
+      await saveScene(locId, sceneKey, null);
+    });
+
+  } else {
+    const fileInput  = container.querySelector(`#fileInput-${uid}`);
+    const uploadArea = container.querySelector(`#uploadArea-${uid}`);
+
+    fileInput?.addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (file) handleSceneImageUpload(file, locId, sceneKey, container, uid);
+    });
+
+    uploadArea?.addEventListener("dragover", e => {
+      e.preventDefault();
+      uploadArea.classList.add("drag-over");
+    });
+    uploadArea?.addEventListener("dragleave", () => uploadArea.classList.remove("drag-over"));
+    uploadArea?.addEventListener("drop", e => {
+      e.preventDefault();
+      uploadArea.classList.remove("drag-over");
+      const file = e.dataTransfer.files[0];
+      if (file?.type.startsWith("image/")) handleSceneImageUpload(file, locId, sceneKey, container, uid);
+    });
+  }
+}
+
+function drawGrid(canvas, natW, natH, widthM) {
+  canvas.width  = natW;
+  canvas.height = natH;
+  const ctx     = canvas.getContext("2d");
+  ctx.clearRect(0, 0, natW, natH);
+  const cellPx  = natW / widthM;
+  const cols    = Math.ceil(widthM);
+  const rows    = Math.ceil(natH / cellPx);
+  ctx.strokeStyle = "rgba(255,255,255,0.13)";
+  ctx.lineWidth   = Math.max(1, natW / 2400);
+  for (let i = 0; i <= cols; i++) {
+    ctx.beginPath(); ctx.moveTo(i * cellPx, 0); ctx.lineTo(i * cellPx, natH); ctx.stroke();
+  }
+  for (let j = 0; j <= rows; j++) {
+    ctx.beginPath(); ctx.moveTo(0, j * cellPx); ctx.lineTo(natW, j * cellPx); ctx.stroke();
+  }
+}
+
+function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
+  tokenLayer.innerHTML = "";
+  const cols  = Math.ceil(widthM);
+  const rows  = Math.ceil(heightM);
+  const wPct  = (1 / cols)  * 100;
+  const hPct  = (1 / rows)  * 100;
+
+  tokens.forEach(token => {
+    const char = characters[token.charId];
+    if (!char) return;
+    const pct        = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
+    const ringColor  = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
+
+    const div = document.createElement("div");
+    div.className    = "dm-scene-token";
+    div.style.left   = `${(token.x / cols) * 100}%`;
+    div.style.top    = `${(token.y / rows) * 100}%`;
+    div.style.width  = `${wPct}%`;
+    div.style.height = `${hPct}%`;
+    div.title        = char.name;
+    div.innerHTML = `
+      <div class="dm-scene-token-inner" style="border-color:${ringColor}">
+        <span class="dm-scene-token-name">${(char.name || "?").substring(0, 2).toUpperCase()}</span>
+      </div>
+      <button class="dm-scene-token-remove" title="Remove token">✕</button>
+    `;
+
+    div.querySelector(".dm-scene-token-remove").addEventListener("click", async e => {
+      e.stopPropagation();
+      const cur = scenes[locId]?.[sceneKey];
+      if (!cur) return;
+      const newTokens = (cur.tokens || []).filter(
+        t => !(t.charId === token.charId && t.x === token.x && t.y === token.y)
+      );
+      await saveScene(locId, sceneKey, { ...cur, tokens: newTokens });
+    });
+
+    tokenLayer.appendChild(div);
+  });
+}
+
+function setupTokenDropZone(tokenLayer, widthM, heightM, locId, sceneKey) {
+  const cols = Math.ceil(widthM);
+  const rows = Math.ceil(heightM);
+
+  tokenLayer.addEventListener("dragover", e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    tokenLayer.classList.add("drag-over");
+  });
+  tokenLayer.addEventListener("dragleave", e => {
+    if (!tokenLayer.contains(e.relatedTarget)) tokenLayer.classList.remove("drag-over");
+  });
+  tokenLayer.addEventListener("drop", async e => {
+    e.preventDefault();
+    tokenLayer.classList.remove("drag-over");
+    const charId = e.dataTransfer.getData("charId");
+    if (!charId) return;
+    const rect  = tokenLayer.getBoundingClientRect();
+    const relX  = (e.clientX - rect.left)  / rect.width;
+    const relY  = (e.clientY - rect.top)   / rect.height;
+    const x     = Math.max(0, Math.min(cols - 1, Math.floor(relX * cols)));
+    const y     = Math.max(0, Math.min(rows - 1, Math.floor(relY * rows)));
+    const cur   = scenes[locId]?.[sceneKey];
+    if (!cur) return;
+    const existing = (cur.tokens || []).filter(t => t.charId !== charId);
+    await saveScene(locId, sceneKey, { ...cur, tokens: [...existing, { charId, x, y }] });
+  });
+}
+
+async function saveScene(locId, sceneKey, data) {
+  await setDoc(doc(db, "scenes", locId), { [sceneKey]: data ?? null }, { merge: true });
+}
+
+async function handleSceneImageUpload(file, locId, sceneKey, container, uid) {
+  const widthM = Math.max(1, parseFloat(container.querySelector(`#scaleInput-${uid}`)?.value) || 20);
+  const uploadArea = container.querySelector(`#uploadArea-${uid}`);
+  if (uploadArea) uploadArea.innerHTML = `<span class="dm-scene-upload-hint">Processing…</span>`;
+
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const img = new Image();
+    img.onload = async () => {
+      const MAX = 1200;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > MAX || h > MAX) {
+        if (w >= h) { h = Math.round((h / w) * MAX); w = MAX; }
+        else        { w = Math.round((w / h) * MAX); h = MAX; }
+      }
+      const cvs = document.createElement("canvas");
+      cvs.width = w; cvs.height = h;
+      cvs.getContext("2d").drawImage(img, 0, 0, w, h);
+      const base64  = cvs.toDataURL("image/jpeg", 0.65);
+      const heightM = widthM * (img.naturalHeight / img.naturalWidth);
+      await saveScene(locId, sceneKey, { image: base64, widthM, heightM, tokens: [] });
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
 }

@@ -100,6 +100,30 @@ Reference this before modifying any system to understand context and constraints
 - **`patch-monsters.mjs`:** Seeds 4 monsters (Goblin Scout, Orc Warrior, Shadow Wraith, Giant Spider) and 4 NPCs (Torven the Innkeeper, Guard Captain Mira, The Mysterious Stranger, Elder Morthis)
 - **Firestore:** Requires `monsters` collection with `allow read, write: if true` rule
 
+### Session 9 — Scenes: map images, grid overlay, character tokens
+- **`index.html`:** Added `🏞️ Scenes` tab button + `#dm-tab-scenes` panel inside the DM panel
+- **`js/dm.js`:**
+  - New state: `scenes {}`, `selectedSceneLocId`, `unsubScenes`
+  - `startListening()` now subscribes to `scenes` collection (`onSnapshot`)
+  - `renderActiveTab()` handles `"scenes"` tab (no char required, like Locations)
+  - `renderCharList()`: character sidebar buttons are now `draggable = true` with `charId` in dataTransfer — characters can be dragged onto the scene grid
+  - `renderScenesTab()` — location selector + two side-by-side scene panels (current / next)
+  - `buildScenePanel()` — builds upload area (no image) OR image+grid+tokens (has image); shows scale row; attach dragover for image file drops
+  - `drawGrid(canvas, natW, natH, widthM)` — draws 1m×1m grid lines on canvas at natural image resolution; CSS scales to display size
+  - `renderTokens()` — renders character tokens as percentage-positioned absolute divs; HP ring color matches HP level; hover shows ✕ remove button
+  - `setupTokenDropZone()` — dragover/drop on token layer; calculates grid cell from mouse position; writes to Firestore
+  - `saveScene(locId, sceneKey, data)` — `setDoc` with `{ merge: true }` to `scenes/{locId}`
+  - `handleSceneImageUpload()` — canvas-compress to max 1200px JPEG 0.65; stores base64 in Firestore; reads current scale input for widthM; auto-calculates heightM from aspect ratio
+- **`css/dm.css`:** Added scene styles: `.dm-scene-loc-selector`, `.dm-scene-panels` (2-col grid), `.dm-scene-panel`, `.dm-scene-map-wrap` (position: relative container), `.dm-scene-img`, `.dm-scene-grid-canvas` (absolute overlay), `.dm-scene-token-layer`, `.dm-scene-token`, `.dm-scene-token-inner`, `.dm-scene-token-remove`, `.dm-scene-scale-row`, `.dm-scene-upload-area`
+- **Firestore:** Requires `scenes` collection with `allow read, write: if true` rule added in Firebase Console
+- **Scenes Firestore structure:**
+  ```
+  scenes/{locId}: {
+    current: { image: "data:image/jpeg;base64,…", widthM: 20, heightM: 15, tokens: [{charId, x, y}] },
+    next:    { image: "…", widthM: 10, heightM: 8, tokens: [] }
+  }
+  ```
+
 ### Session 7 — General Actions narrate interface
 - **`js/sheet.js`:** Replaced direct-log general action buttons with a narrate workflow:
   - Textarea at top of General Actions column for free-form input (English/Hungarian/mixed)
