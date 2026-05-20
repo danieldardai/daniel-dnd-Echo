@@ -540,9 +540,15 @@ function startListening() {
 // ── Character sidebar ─────────────────────────────────────
 function renderCharList() {
   dmCharList.innerHTML = "";
-  Object.values(characters)
-    .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-    .forEach(char => {
+  let chars = Object.values(characters)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  // When Scenes tab is active, only show characters at that location
+  if (activeTab() === "scenes" && selectedSceneLocId) {
+    chars = chars.filter(c => c.locationId === selectedSceneLocId);
+  }
+
+  chars.forEach(char => {
       const btn = document.createElement("button");
       btn.className = "dm-char-btn" + (char.id === selectedCharId ? " active" : "");
       const pct = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
@@ -573,6 +579,7 @@ document.querySelectorAll(".dm-tab-btn").forEach(btn => {
     btn.classList.add("active");
     document.getElementById("dm-tab-" + btn.dataset.tab).classList.remove("hidden");
     renderActiveTab();
+    renderCharList(); // re-filter sidebar for new tab context
   });
 });
 
@@ -1511,6 +1518,7 @@ function renderScenesTab() {
   el.querySelector("#dmSceneLocSel").addEventListener("change", e => {
     selectedSceneLocId = e.target.value;
     renderScenesTab();
+    renderCharList();
   });
 
   const panelsEl = el.querySelector("#dmScenePanels");
