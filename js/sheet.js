@@ -451,7 +451,7 @@ async function callClaudeAction(text, charName) {
       max_tokens: 300,
       messages: [{
         role: "user",
-        content: `You are a narrative assistant for "Echoes Beneath," a dark fantasy tabletop RPG. The player controlling ${charName} described their character's action. The input may be in English, Hungarian, or a mixture of both — accept all of these. Correct any typos, understand the intent, and write a vivid 1-2 sentence in-character action description in both languages.\n\nPlayer input: "${text}"\n\nRespond in exactly this format (no extra commentary):\n🇬🇧 [English description, 1-2 sentences]\n🇭🇺 [Hungarian description, 1-2 sentences]`,
+        content: `RPG action log. Input may be English, Hungarian, or mixed. Fix typos, understand the intent, output a short action phrase (no full sentences, no flourish) in both languages.\n\nInput: "${text}"\n\nFormat (no extra text):\n🇬🇧 [short action phrase]\n🇭🇺 [short action phrase]`,
       }],
     }),
   });
