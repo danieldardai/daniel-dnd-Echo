@@ -1648,29 +1648,45 @@ function drawGrid(canvas, natW, natH, widthM) {
 
 function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
   tokenLayer.innerHTML = "";
-  const cols  = Math.ceil(widthM);
-  const rows  = Math.ceil(heightM);
-  const wPct  = (1 / cols)  * 100;
-  const hPct  = (1 / rows)  * 100;
+  const cols = Math.ceil(widthM);
+  const rows = Math.ceil(heightM);
+  const wPct = (1 / cols) * 100;
+  const hPct = (1 / rows) * 100;
 
   tokens.forEach(token => {
     const char = characters[token.charId];
     if (!char) return;
-    const pct        = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
-    const ringColor  = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
+    const pct       = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
+    const ringColor = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
+    const portrait  = char.portrait || null;
+    const fallback  = char.emoji || "⚔️";
 
     const div = document.createElement("div");
-    div.className    = "dm-scene-token";
+    div.className  = "dm-scene-token";
     div.style.left   = `${(token.x / cols) * 100}%`;
     div.style.top    = `${(token.y / rows) * 100}%`;
     div.style.width  = `${wPct}%`;
     div.style.height = `${hPct}%`;
-    div.title        = char.name;
+
+    // Bubble: portrait thumbnail + name (always visible, floats above marker)
+    const bubblePortraitHTML = portrait
+      ? `<img src="${portrait}" class="dm-scene-bubble-img" alt="${char.name}" />`
+      : `<span class="dm-scene-bubble-emoji">${fallback}</span>`;
+
+    // Marker: circular portrait pin on the grid cell
+    const markerHTML = portrait
+      ? `<img src="${portrait}" class="dm-scene-marker-img" alt="${char.name}" />`
+      : `<span class="dm-scene-marker-emoji">${fallback}</span>`;
+
     div.innerHTML = `
-      <div class="dm-scene-token-inner" style="border-color:${ringColor}">
-        <span class="dm-scene-token-name">${(char.name || "?").substring(0, 2).toUpperCase()}</span>
+      <div class="dm-scene-token-bubble">
+        ${bubblePortraitHTML}
+        <span class="dm-scene-bubble-name">${char.name || "?"}</span>
       </div>
-      <button class="dm-scene-token-remove" title="Remove token">✕</button>
+      <div class="dm-scene-token-marker" style="border-color:${ringColor}">
+        ${markerHTML}
+      </div>
+      <button class="dm-scene-token-remove" title="Remove">✕</button>
     `;
 
     div.querySelector(".dm-scene-token-remove").addEventListener("click", async e => {
