@@ -1484,6 +1484,24 @@
 }
 .dm-scene-token:hover .dm-scene-token-remove { display: flex; }
 
+/* Dead monster token (HP = 0) */
+.dm-scene-token--dead .dm-scene-token-bubble { opacity: 0.4; }
+.dm-scene-token--dead .dm-scene-token-marker { opacity: 0.4; }
+.dm-scene-token--dead .dm-scene-token-marker::after {
+  content: '✕';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c0392b;
+  font-size: 1.2em;
+  font-weight: bold;
+  pointer-events: none;
+  background: rgba(0,0,0,0.35);
+  text-shadow: 0 0 6px rgba(192,57,43,0.9);
+}
+
 /* Click-to-move: selected token */
 .dm-scene-token--moving .dm-scene-token-bubble {
   border-color: #c8a840;

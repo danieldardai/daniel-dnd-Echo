@@ -1796,7 +1796,7 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
       const icon      = m.type === "npc" ? "👤" : "💀";
 
       div = document.createElement("div");
-      div.className    = "dm-scene-token";
+      div.className    = "dm-scene-token" + ((m.hp ?? 0) <= 0 ? " dm-scene-token--dead" : "");
       div.style.left   = `${(token.x / cols) * 100}%`;
       div.style.top    = `${(token.y / rows) * 100}%`;
       div.style.width  = `${(sizeX / cols) * 100}%`;
