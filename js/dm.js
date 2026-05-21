@@ -1825,6 +1825,18 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
       });
       div.querySelector(".dm-scene-token-bubble").addEventListener("click", e => {
         e.stopPropagation();
+        // Pin monster in encounter sidebar on every bubble click
+        const mType = m.type === "npc" ? "npc" : "monster";
+        if (selectedEncType !== mType) {
+          selectedEncType = mType;
+          document.querySelectorAll(".dm-enc-filter-btn").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.type === selectedEncType);
+          });
+        }
+        pinnedMonsterId = token.monsterId;
+        renderEncounterList();
+        document.getElementById("dmEncList")?.scrollTo({ top: 0, behavior: "smooth" });
+        // Move mode toggle
         if (movingToken?.locId === locId && movingToken?.sceneKey === sceneKey &&
             movingToken?.token.monsterId === token.monsterId) {
           clearMoveMode();
