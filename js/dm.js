@@ -1674,6 +1674,7 @@ function buildScenePanel(container, locId, sceneKey, sceneData) {
   container.innerHTML = `
     <div class="dm-scene-panel-header">
       <span class="dm-scene-panel-title">${icon} ${labelText}</span>
+      ${hasImage && sceneKey === "current" ? `<button class="dm-btn dm-btn-neutral dm-btn-sm dm-scene-copy-btn" title="Copy map to Next Scene (tokens start fresh)">📋 Copy to Next</button>` : ""}
       ${hasImage && sceneKey === "next" ? `<button class="dm-btn dm-btn-heal dm-btn-sm dm-scene-golive-btn" title="Make this the current scene">▶ Go Live</button>` : ""}
       ${hasImage ? `<button class="dm-btn-del dm-scene-clear-btn" title="Remove scene image">✕</button>` : ""}
     </div>
@@ -1753,6 +1754,15 @@ function buildScenePanel(container, locId, sceneKey, sceneData) {
         current: nextData,
         next: deleteField(),
       });
+    });
+
+    container.querySelector(".dm-scene-copy-btn")?.addEventListener("click", async () => {
+      const cur = scenes[locId]?.current || sceneData;
+      if (!cur?.image) return;
+      if (scenes[locId]?.next?.image) {
+        if (!confirm("Next Scene already has a map. Overwrite it?")) return;
+      }
+      await saveScene(locId, "next", { image: cur.image, widthM: cur.widthM || 20, heightM: cur.heightM || 20, tokens: [] });
     });
 
   } else {
