@@ -124,6 +124,115 @@ Reference this before modifying any system to understand context and constraints
   }
   ```
 
+### Session 11 — DM Scenes tab: dropdown + Go Live + character filter
+
+#### Overview
+Replaced the all-locations-at-once Scenes view with a single-location dropdown, added a **▶ Go Live** button that atomically promotes the Next Scene to Current, fixed the Scenes tab character sidebar filter, and hardened the Go Live → character sheet live-update path.
+
+#### DM Scenes tab: dropdown (`js/dm.js`, `css/dm.css`)
+- `renderScenesTab()` now builds a **dropdown** (`<select>`) at the top + an empty `#dmScenePanelsWrap` div below.
+- New `renderScenePanels()` function builds ONLY the two scene panels for `selectedSceneLocId`. Called by:
+  - `renderScenesTab()` after creating the header
+  - The dropdown `change` listener (preserves header, replaces panels only)
+  - The Firestore `scenes` snapshot callback — but ONLY if `#dmScenePanelsWrap` already exists; otherwise falls back to `renderScenesTab()` (full init)
+- **Why the split matters:** the previous `renderScenesTab()` rebuilt everything on every Firestore update, resetting the dropdown to whatever was in state. Now only the panels refresh, so the dropdown selection survives live data updates.
+- `selectedSceneLocId` (already existed as module-level state) is preserved across every panel re-render. Defaults to `sortedLocs[0].id` if null or pointing to a deleted location.
+- `css/dm.css` — `.dm-scene-loc-selector` gains `padding`, `border-bottom`, and `flex-shrink: 0`; added `.dm-scene-loc-select` alias to the existing width rule; `#dmScenePanelsWrap` gets `flex: 1; overflow-y: auto; padding`.
+
+#### Character sidebar filter
+- `renderCharList()` now reads `activeTab()`. When `=== "scenes"` AND `selectedSceneLocId` is set, it filters to only characters whose `char.locationId === selectedSceneLocId`.
+- The dropdown `change` listener calls `renderCharList()` after `renderScenePanels()` so the sidebar updates immediately on location switch.
+
+#### ▶ Go Live button (`js/dm.js`)
+- Added to the **Next Scene** panel header (only when image is present, `sceneKey === "next" && hasImage`).
+- **Original bug: two sequential writes → two Firestore events → render race on character sheet.**
+  - `await saveScene(locId, "current", nextData)` — event 1
+  - `await saveScene(locId, "next", null)` — event 2
+  - The character sheet's `_sceneRenderSeq` guard killed the first render (superseded by event 2), and the second render sometimes didn't complete visually.
+- **Fix:** single atomic `updateDoc` call with `deleteField()` for `next`:
+  ```javascript
+  await updateDoc(doc(db, "scenes", locId), {
+    current: nextData,
+    next: deleteField(),
+  });
+  ```
+  One write → ONE Firestore snapshot on the character sheet → ONE `renderScene()` call → no guard interference.
+- Added `deleteField` to dm.js imports.
+- `nextData` is read from live `scenes[locId]?.next` (falls back to the render-time `sceneData` parameter) to ensure the latest token positions are included.
+
+---
+
+### Session 10 — Campaign tab: current scene viewer + layout overhaul
+
+#### Final layout of `#tab-log`
+```
+#tab-log  (flex column, position:absolute inset:0)
+├── .campaign-scene-section   (flex: 1 — fills ~80% of height)
+│   └── .campaign-scene-wrap  (flex:1; overflow:hidden; position:relative)
+│       └── .campaign-scene-map-wrap  (position:absolute; inset:0)
+│           ├── .campaign-scene-img          (width/height:100%; object-fit:contain)
+│           ├── .campaign-scene-grid-canvas  (position:absolute — JS-positioned)
+│           └── .campaign-scene-token-layer  (position:absolute — JS-positioned)
+└── .log-split  (flex: 0 0 20% — pinned bottom strip)
+    ├── .log-tab-bar   (toggle buttons: Character Log / Location Log)
+    └── .log-col × 2  (only one visible at a time via .hidden class)
+```
+
+#### `character.html` changes
+- Nav tab renamed `"📜 Campaign Log"` → `"📜 Campaign"`
+- `#tab-log` restructured: `.campaign-scene-section` on top (scene map), `.log-split` at bottom (log strip)
+- `.log-split` now has `.log-tab-bar` with two toggle `<button class="log-tab-btn">` elements (`data-log="local"` / `data-log="location"`) instead of two always-visible columns
+- Each `.log-col` gets an `id` (`logColLocal` / `logColLocation`); second starts with `.hidden`
+
+#### `js/sheet.js` changes
+- **Imports:** added `getDocFromServer`
+- **State:** `sceneData`, `unsubScene`, `monsters`, `_sceneRenderSeq`
+- **`initSceneListener(locationId)`** — unsubscribes old listener, re-subscribes to `scenes/{locId}`; called from `renderLocation()` whenever `locationId` changes
+- **`renderScene()`** — rebuilds the entire `#campaignSceneWrap` DOM on each call; increments `_sceneRenderSeq` so stale async renders are discarded (see Tricky Bits below)
+- **`drawSceneGrid(canvas, natW, natH, widthM)`** — draws at natural image resolution; CSS scales it
+- **`renderSceneTokens(tokenLayer, widthM, heightM, tokens)`** — character tokens get portrait bubble + HP-color ring; current character gets gold ring; monster tokens get emoji bubble + red rectangle; **orphaned monster tokens (monster deleted but token remains in scene doc) are skipped with `if (!m) return`**
+- **Monsters listener** added inside `initLogs()` — subscribes to `monsters` collection; calls `renderScene()` on any change so token labels stay current
+- **Tab switch:** `renderScene()` called immediately + `getDocFromServer` fetch fires asynchronously to catch any missed Firestore events (stale WebSocket protection)
+- **Log toggle:** `document.querySelectorAll(".log-tab-btn")` handler toggles `#logColLocal` / `#logColLocation` hidden state
+
+#### `css/sheet.css` changes
+- `.campaign-scene-section` — `flex: 1; overflow: hidden` (no fixed height — fills all space above the log strip)
+- `.campaign-scene-wrap` — `flex: 1; overflow: hidden; position: relative` (no scrolling — scene must fit)
+- `.campaign-scene-map-wrap` — `position: absolute; inset: 0` (fills wrap completely)
+- `.campaign-scene-img` — `width: 100%; height: 100%; object-fit: contain` (letterbox to fit without cropping)
+- `.campaign-scene-grid-canvas` and `.campaign-scene-token-layer` — `position: absolute` only; left/top/width/height set by JS to align with actual image display rect
+- `#tab-log .log-split` override — `flex: 0 0 20%; display: flex; flex-direction: column; grid-template-columns: unset; border-top`
+- `#tab-log .log-col` override — `flex: 1; border: none; border-radius: 0; background: transparent`
+- `.log-tab-bar`, `.log-tab-btn`, `.log-tab-btn.active` — tab-strip toggle styling
+- Token styles: `.campaign-scene-token-bubble` (speech bubble above token with `::after` downward arrow), `.campaign-scene-bubble-img` (30px circle portrait), `.campaign-scene-token-marker` (circle, CSS var `--ring-color`), `.me` (gold ring for current char), `--enc` (rect for monsters)
+
+#### ⚠️ Tricky Bits — read before touching this code
+
+**1. `object-fit: contain` breaks canvas/token overlay alignment**
+When an `<img>` uses `object-fit: contain` inside a fixed container, the image is letterboxed. A canvas `position:absolute; inset:0` over the same container covers the FULL container including the letterbox bars — the grid lines don't align with the image content. Fix: after the image loads, calculate the actual displayed rect in JS:
+```javascript
+const scale = Math.min(containerW / natW, containerH / natH);
+const dW = natW * scale;  const dH = natH * scale;
+const oX = (containerW - dW) / 2;  const oY = (containerH - dH) / 2;
+canvas.style.left = `${oX}px`; canvas.style.top = `${oY}px`;
+canvas.style.width = `${dW}px`; canvas.style.height = `${dH}px`;
+// same for tokenLayer
+```
+This must run AFTER `img.offsetWidth` is valid (i.e., after the image fires `onload` or synchronously if `img.complete && img.naturalWidth > 0`).
+
+**2. Render sequence guard (`_sceneRenderSeq`)**
+`renderScene()` increments a counter and captures it in the `onReady` closure. Before writing to the DOM, the closure checks `if (seq !== _sceneRenderSeq) return`. This discards stale renders when two Firestore events arrive close together (e.g., monsters listener fires while a scene update is in flight). Without this, a slow-decoding base64 image from render N could overwrite the correct DOM from render N+1.
+
+**3. Base64/data URI image loading is unpredictably sync or async**
+For `data:` URIs, `img.complete` may be `true` immediately after setting `img.src` in some browsers (image decoded synchronously). In others it fires `onload` asynchronously. Always handle both: `if (img.complete && img.naturalWidth) onReady(); else img.addEventListener("load", onReady)`.
+`img.offsetWidth` accessed synchronously (after DOM append but before a layout tick) forces a reflow and returns the correct value. Do NOT trust it when the containing element is `display:none`.
+
+**4. Orphaned monster tokens**
+When a monster is deleted from the `monsters` collection but its token is still in `scenes/{locId}.current.tokens`, `monsters[token.monsterId]` is `undefined`. The guard `if (!m) return` inside `renderSceneTokens` silently skips these. Without it, `|| {}` fallback would render an empty-name `💀` token forever.
+
+**5. `getDocFromServer` as live-update safety net**
+Firestore's WebSocket can go stale (brief disconnect, mobile background, tab sleep). When this happens `onSnapshot` stops delivering updates; after a refresh the latest data appears because `getDoc` hits the server directly. Fix: on Campaign tab click, fire `getDocFromServer(doc(db, "scenes", locId))` in the background. If the fetched data differs from `sceneData`, update and re-render. This is additive — it does NOT replace the `onSnapshot` listener.
+
 ### Session 7 — General Actions narrate interface
 - **`js/sheet.js`:** Replaced direct-log general action buttons with a narrate workflow:
   - Textarea at top of General Actions column for free-form input (English/Hungarian/mixed)

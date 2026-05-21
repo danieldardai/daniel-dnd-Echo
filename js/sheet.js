@@ -1,6 +1,6 @@
 import { db } from "./firebase-config.js";
 import {
-  doc, onSnapshot, updateDoc, addDoc, getDoc,
+  doc, onSnapshot, updateDoc, addDoc, getDoc, getDocFromServer,
   collection, serverTimestamp, orderBy, query, limit
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -113,6 +113,29 @@ navTabs.forEach(btn => {
     btn.classList.add("active");
     document.getElementById(`tab-${btn.dataset.tab}`).classList.remove("hidden");
     if (btn.dataset.tab === "dice") renderDiceTab();
+    if (btn.dataset.tab === "log") {
+      renderScene();
+      // Force server read to catch any missed real-time updates
+      const locId = currentData?.locationId;
+      if (locId) {
+        getDocFromServer(doc(db, "scenes", locId)).then(snap => {
+          const fresh = snap.exists() ? snap.data() : null;
+          sceneData = fresh;
+          renderScene();
+        }).catch(() => {});
+      }
+    }
+  });
+});
+
+// Log panel toggle (Character / Location)
+document.querySelectorAll(".log-tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".log-tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const target = btn.dataset.log;
+    document.getElementById("logColLocal")   .classList.toggle("hidden", target !== "local");
+    document.getElementById("logColLocation").classList.toggle("hidden", target !== "location");
   });
 });
 
@@ -955,6 +978,7 @@ let lastLocationId = undefined;
 async function renderLocation(locationId) {
   if (locationId === lastLocationId) return;
   lastLocationId = locationId;
+  initSceneListener(locationId);
   if (!locationId) { sidebarLocation.textContent = ""; return; }
   try {
     const snap = await getDoc(doc(db, "locations", locationId));
@@ -1107,6 +1131,10 @@ const TURN_PHASE_ICONS = { combat:"⚔️", exploration:"🗺️", roleplay:"�
 
 let allCampaignTurns = {};
 
+let sceneData   = null;
+let unsubScene  = null;
+let monsters    = {};
+
 function updateTurnBanner() {
   const myLocId = currentData.locationId ?? null;
   // Location-specific turn takes priority over global
@@ -1131,6 +1159,123 @@ function renderTurnBanner(turnData) {
     <span class="turn-banner-sep">·</span>
     <span class="turn-banner-phase">${phase.charAt(0).toUpperCase() + phase.slice(1)}</span>
   `;
+}
+
+// ---- Scene viewer (Campaign tab top half) ------------------------------------
+
+function initSceneListener(locationId) {
+  if (unsubScene) { unsubScene(); unsubScene = null; }
+  sceneData = null;
+  if (!locationId) { renderScene(); return; }
+  unsubScene = onSnapshot(doc(db, "scenes", locationId), snap => {
+    sceneData = snap.exists() ? snap.data() : null;
+    renderScene();
+  }, () => { sceneData = null; renderScene(); });
+}
+
+let _sceneRenderSeq = 0;
+
+function renderScene() {
+  const seq = ++_sceneRenderSeq;
+  const wrap = document.getElementById("campaignSceneWrap");
+  if (!wrap) return;
+  const current = sceneData?.current;
+  if (!current?.image) {
+    wrap.innerHTML = `<p class="scene-placeholder-msg">No scene available</p>`;
+    return;
+  }
+  wrap.innerHTML = "";
+  const mapWrap = document.createElement("div");
+  mapWrap.className = "campaign-scene-map-wrap";
+  const img = document.createElement("img");
+  img.className = "campaign-scene-img";
+  img.src = current.image;
+  const canvas = document.createElement("canvas");
+  canvas.className = "campaign-scene-grid-canvas";
+  const tokenLayer = document.createElement("div");
+  tokenLayer.className = "campaign-scene-token-layer";
+  mapWrap.appendChild(img);
+  mapWrap.appendChild(canvas);
+  mapWrap.appendChild(tokenLayer);
+  wrap.appendChild(mapWrap);
+  const onReady = () => {
+    if (seq !== _sceneRenderSeq) return; // superseded by a newer render
+    const cW = img.offsetWidth,   cH = img.offsetHeight;
+    const nW = img.naturalWidth,  nH = img.naturalHeight;
+    const scale = Math.min(cW / nW, cH / nH);
+    const dW = Math.round(nW * scale), dH = Math.round(nH * scale);
+    const oX = Math.round((cW - dW) / 2), oY = Math.round((cH - dH) / 2);
+    canvas.style.left    = `${oX}px`; canvas.style.top    = `${oY}px`;
+    canvas.style.width   = `${dW}px`; canvas.style.height = `${dH}px`;
+    tokenLayer.style.left  = `${oX}px`; tokenLayer.style.top  = `${oY}px`;
+    tokenLayer.style.width = `${dW}px`; tokenLayer.style.height = `${dH}px`;
+    drawSceneGrid(canvas, nW, nH, current.widthM || 20);
+    renderSceneTokens(tokenLayer, current.widthM || 20, current.heightM || 15, current.tokens || []);
+  };
+  if (img.complete && img.naturalWidth) onReady();
+  else img.addEventListener("load", onReady);
+}
+
+function drawSceneGrid(canvas, natW, natH, widthM) {
+  const cols = Math.round(widthM) || 20;
+  const rows = Math.round((natH / natW) * cols) || 15;
+  canvas.width  = natW;
+  canvas.height = natH;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, natW, natH);
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  ctx.lineWidth = 1;
+  for (let c = 0; c <= cols; c++) {
+    ctx.beginPath(); ctx.moveTo((c / cols) * natW, 0); ctx.lineTo((c / cols) * natW, natH); ctx.stroke();
+  }
+  for (let r = 0; r <= rows; r++) {
+    ctx.beginPath(); ctx.moveTo(0, (r / rows) * natH); ctx.lineTo(natW, (r / rows) * natH); ctx.stroke();
+  }
+}
+
+function renderSceneTokens(tokenLayer, widthM, heightM, tokens) {
+  tokenLayer.innerHTML = "";
+  const cols = Math.round(widthM)  || 20;
+  const rows = Math.round(heightM) || 15;
+
+  tokens.forEach(token => {
+    if (token.charId) {
+      const char = allCharData[token.charId] || (token.charId === charId ? currentData : null);
+      if (!char) return;
+      const isMe = token.charId === charId;
+      const pct  = char.hpMax ? Math.min(100, Math.max(0, (char.hp / char.hpMax) * 100)) : 100;
+      const ring = pct > 60 ? "var(--hp-green)" : pct > 30 ? "var(--hp-amber)" : "var(--hp-red)";
+      const div = document.createElement("div");
+      div.className = "campaign-scene-token";
+      div.style.left   = `${(token.x / cols) * 100}%`;
+      div.style.top    = `${(token.y / rows) * 100}%`;
+      div.style.width  = `${(1 / cols) * 100}%`;
+      div.style.height = `${(1 / rows) * 100}%`;
+      const portraitHTML = char.portrait
+        ? `<img class="campaign-scene-bubble-img" src="${char.portrait}" alt="${char.name}" />`
+        : `<span class="campaign-scene-bubble-emoji">${char.emoji || "⚔️"}</span>`;
+      div.innerHTML = `
+        <div class="campaign-scene-token-bubble">${portraitHTML}<span class="campaign-scene-bubble-name">${char.name || "?"}</span></div>
+        <div class="campaign-scene-token-marker${isMe ? " me" : ""}" style="--ring-color:${ring}"></div>`;
+      tokenLayer.appendChild(div);
+    } else if (token.monsterId) {
+      const m = monsters[token.monsterId];
+      if (!m) return; // monster deleted — skip orphaned token
+      const sizeX = token.sizeX || 1;
+      const sizeY = token.sizeY || 1;
+      const icon = m.type === "npc" ? "👤" : "💀";
+      const div = document.createElement("div");
+      div.className = "campaign-scene-token";
+      div.style.left   = `${(token.x / cols) * 100}%`;
+      div.style.top    = `${(token.y / rows) * 100}%`;
+      div.style.width  = `${(sizeX / cols) * 100}%`;
+      div.style.height = `${(sizeY / rows) * 100}%`;
+      div.innerHTML = `
+        <div class="campaign-scene-token-bubble"><span class="campaign-scene-bubble-emoji">${icon}</span><span class="campaign-scene-bubble-name">${m.name || "?"}</span></div>
+        <div class="campaign-scene-token-marker campaign-scene-token-marker--enc"></div>`;
+      tokenLayer.appendChild(div);
+    }
+  });
 }
 
 function initLogs() {
@@ -1171,6 +1316,16 @@ function initLogs() {
     });
     updateTurnBanner();
   }, () => updateTurnBanner());
+
+  // Track monsters/NPCs for scene token labels
+  onSnapshot(collection(db, "monsters"), snap => {
+    snap.docChanges().forEach(change => {
+      const id = change.doc.id;
+      if (change.type === "removed") delete monsters[id];
+      else monsters[id] = { ...change.doc.data(), id };
+    });
+    renderScene();
+  }, () => {});
 
   // Track all characters to know who shares this location
   onSnapshot(collection(db, "characters"), (snapshot) => {

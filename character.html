@@ -81,7 +81,7 @@
 
       <!-- Tab navigation -->
       <nav class="sidebar-nav">
-        <button class="nav-tab active" data-tab="log">📜 Campaign Log</button>
+        <button class="nav-tab active" data-tab="log">📜 Campaign</button>
         <button class="nav-tab" data-tab="stats">📊 Stats</button>
         <button class="nav-tab" data-tab="actions">⚔️ Actions</button>
         <button class="nav-tab" data-tab="dice">🎲 Dice</button>
@@ -97,17 +97,25 @@
       <!-- Turn banner — shown when DM has an active turn -->
       <div class="turn-banner hidden" id="turnBanner"></div>
 
-      <!-- Tab: Campaign Log -->
+      <!-- Tab: Campaign -->
       <div class="tab-panel" id="tab-log">
+        <div class="campaign-scene-section">
+          <h2 class="log-col-title">🗺️ Current Scene</h2>
+          <div class="campaign-scene-wrap" id="campaignSceneWrap">
+            <p class="scene-placeholder-msg">No scene available</p>
+          </div>
+        </div>
         <div class="log-split">
-          <div class="log-col">
-            <h2 class="log-col-title">Character Log</h2>
+          <div class="log-tab-bar">
+            <button class="log-tab-btn active" data-log="local">Character Log</button>
+            <button class="log-tab-btn" data-log="location">Location Log <span class="live-badge">⬤ Live</span></button>
+          </div>
+          <div class="log-col" id="logColLocal">
             <div class="log-feed" id="localLogFeed">
               <div class="log-empty">No events for this character yet…</div>
             </div>
           </div>
-          <div class="log-col">
-            <h2 class="log-col-title">Location Log <span class="live-badge">⬤ Live</span></h2>
+          <div class="log-col hidden" id="logColLocation">
             <div class="log-feed" id="locationLogFeed">
               <div class="log-empty">No events in this location yet…</div>
             </div>

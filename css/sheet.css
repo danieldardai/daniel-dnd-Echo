@@ -353,6 +353,167 @@ body.sheet-page {
   scrollbar-color: var(--gold-dim) transparent;
 }
 
+/* ---- Campaign tab: scene section (top) + log split (bottom) ---- */
+.campaign-scene-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.campaign-scene-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+.scene-placeholder-msg {
+  color: var(--parchment-dim);
+  font-style: italic;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+#tab-log .log-split {
+  flex: 0 0 20%;
+  min-height: 0;
+  height: unset;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: 0;
+  grid-template-columns: unset;
+  border-top: 1px solid var(--border);
+  background: rgba(5,5,7,0.6);
+}
+
+.log-tab-bar {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+.log-tab-btn {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  font-family: var(--font-heading);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--parchment-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  transition: color var(--transition), background var(--transition), border-color var(--transition);
+}
+.log-tab-btn:hover {
+  color: var(--parchment);
+  background: rgba(139,26,26,0.08);
+}
+.log-tab-btn.active {
+  color: var(--gold-light);
+  border-bottom-color: var(--ember-light);
+  background: rgba(139,26,26,0.12);
+}
+
+#tab-log .log-col {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.4rem 1rem;
+}
+
+/* Scene map viewer */
+.campaign-scene-map-wrap {
+  position: absolute;
+  inset: 0;
+}
+.campaign-scene-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.campaign-scene-grid-canvas {
+  position: absolute;
+  pointer-events: none;
+}
+.campaign-scene-token-layer {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Scene tokens */
+.campaign-scene-token {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+.campaign-scene-token-bubble {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(5,5,7,0.88);
+  border: 1px solid var(--border-bright);
+  border-radius: 5px;
+  padding: 3px 6px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+  z-index: 10;
+}
+.campaign-scene-token-bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: var(--border-bright);
+}
+.campaign-scene-bubble-img {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: top;
+  border: 1px solid var(--border-bright);
+}
+.campaign-scene-bubble-emoji { font-size: 1rem; line-height: 1.2; }
+.campaign-scene-bubble-name {
+  font-family: var(--font-heading);
+  font-size: 0.5rem;
+  letter-spacing: 0.06em;
+  color: var(--parchment);
+  text-align: center;
+}
+.campaign-scene-token-marker {
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  border: 2px solid var(--ring-color, var(--hp-green));
+  background: rgba(0,0,0,0.35);
+}
+.campaign-scene-token-marker.me {
+  border-color: var(--gold-light);
+  box-shadow: 0 0 8px rgba(230,168,23,0.5);
+}
+.campaign-scene-token-marker--enc {
+  inset: 8%;
+  border-radius: 4px;
+  background: rgba(80,20,20,0.5);
+  border-color: rgba(192,57,27,0.7);
+}
+
 /* ---- Campaign log split ---- */
 .log-split {
   display: grid;
@@ -1314,8 +1475,8 @@ body.sheet-page {
   .nav-tab.active { border-left: none; border-bottom-color: var(--ember-light); }
   .sheet-main { height: auto; }
   .tab-panel { position: static; overflow: visible; height: auto; }
-  .log-split { grid-template-columns: 1fr; height: auto; }
-  .log-col { max-height: 300px; }
+  .log-split { grid-template-columns: unset; height: auto; flex: 0 0 240px; }
+  #tab-log .log-col { max-height: unset; }
 }
 
 /* ============================================================

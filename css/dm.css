@@ -1226,8 +1226,10 @@
 .dm-scene-loc-selector {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.8rem;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem 0.5rem;
+  border-bottom: 1px solid var(--dm-border);
+  flex-shrink: 0;
 }
 .dm-scene-loc-label {
   font-family: 'Cinzel', serif;
@@ -1237,7 +1239,9 @@
   color: #6a5a4a;
   white-space: nowrap;
 }
-.dm-scene-loc-sel { flex: 1; max-width: 260px; }
+.dm-scene-loc-sel,
+.dm-scene-loc-select { flex: 1; max-width: 260px; }
+#dmScenePanelsWrap { flex: 1; overflow-y: auto; padding: 0.8rem 1rem; }
 
 /* Location section wrapper */
 .dm-scene-section {

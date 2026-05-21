@@ -1,7 +1,7 @@
 import { db } from "./firebase-config.js";
 import {
   collection, onSnapshot, orderBy, query,
-  doc, updateDoc, addDoc, deleteDoc, setDoc, serverTimestamp,
+  doc, updateDoc, addDoc, deleteDoc, setDoc, serverTimestamp, deleteField,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const DM_PASSWORD = "1234";
@@ -532,7 +532,11 @@ function startListening() {
         if (change.type === "removed") delete scenes[id];
         else scenes[id] = { id, ...change.doc.data() };
       });
-      if (activeTab() === "scenes") renderScenesTab();
+      if (activeTab() === "scenes") {
+        // Only rebuild panels — preserves the dropdown selection
+        if (document.getElementById("dmScenePanelsWrap")) renderScenePanels();
+        else renderScenesTab();
+      }
     }, () => {});
   }
 }
@@ -540,7 +544,9 @@ function startListening() {
 // ── Character sidebar ─────────────────────────────────────
 function renderCharList() {
   dmCharList.innerHTML = "";
+  const scenesActive = activeTab() === "scenes";
   const chars = Object.values(characters)
+    .filter(char => !scenesActive || !selectedSceneLocId || char.locationId === selectedSceneLocId)
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   chars.forEach(char => {
@@ -1518,39 +1524,55 @@ function renderScenesTab() {
     return;
   }
 
-  el.innerHTML = "";
+  // Default to first location, or keep existing selection if still valid
+  if (!selectedSceneLocId || !locations[selectedSceneLocId]) {
+    selectedSceneLocId = sortedLocs[0].id;
+  }
 
-  sortedLocs.forEach(loc => {
-    const sceneDoc = scenes[loc.id] || {};
+  el.innerHTML = `
+    <div class="dm-scene-loc-selector">
+      <span class="dm-scene-loc-label">Location</span>
+      <select class="dm-input dm-scene-loc-select" id="sceneLocSelect">
+        ${sortedLocs.map(l =>
+          `<option value="${l.id}"${l.id === selectedSceneLocId ? " selected" : ""}>${l.emoji || "🗺️"} ${l.name}</option>`
+        ).join("")}
+      </select>
+    </div>
+    <div id="dmScenePanelsWrap"></div>
+  `;
 
-    const section = document.createElement("div");
-    section.className = "dm-scene-section";
-
-    const header = document.createElement("div");
-    header.className = "dm-scene-section-header";
-    header.innerHTML = `
-      <span class="dm-scene-section-emoji">${loc.emoji || "🗺️"}</span>
-      <span class="dm-scene-section-name">${loc.name}</span>
-      ${loc.description ? `<span class="dm-scene-section-desc">${loc.description}</span>` : ""}
-    `;
-
-    const panels = document.createElement("div");
-    panels.className = "dm-scene-panels";
-
-    const curPanel  = document.createElement("div");
-    curPanel.className = "dm-scene-panel";
-    const nextPanel = document.createElement("div");
-    nextPanel.className = "dm-scene-panel";
-
-    buildScenePanel(curPanel,  loc.id, "current", sceneDoc.current || null);
-    buildScenePanel(nextPanel, loc.id, "next",    sceneDoc.next    || null);
-
-    panels.appendChild(curPanel);
-    panels.appendChild(nextPanel);
-    section.appendChild(header);
-    section.appendChild(panels);
-    el.appendChild(section);
+  el.querySelector("#sceneLocSelect").addEventListener("change", e => {
+    selectedSceneLocId = e.target.value;
+    renderScenePanels();
+    renderCharList();
   });
+
+  renderScenePanels();
+}
+
+function renderScenePanels() {
+  const wrap = document.getElementById("dmScenePanelsWrap");
+  if (!wrap || !selectedSceneLocId) return;
+  const loc = locations[selectedSceneLocId];
+  if (!loc) return;
+
+  const sceneDoc = scenes[selectedSceneLocId] || {};
+  wrap.innerHTML = "";
+
+  const panels = document.createElement("div");
+  panels.className = "dm-scene-panels";
+
+  const curPanel  = document.createElement("div");
+  curPanel.className = "dm-scene-panel";
+  const nextPanel = document.createElement("div");
+  nextPanel.className = "dm-scene-panel";
+
+  buildScenePanel(curPanel,  loc.id, "current", sceneDoc.current || null);
+  buildScenePanel(nextPanel, loc.id, "next",    sceneDoc.next    || null);
+
+  panels.appendChild(curPanel);
+  panels.appendChild(nextPanel);
+  wrap.appendChild(panels);
 }
 
 function buildScenePanel(container, locId, sceneKey, sceneData) {
@@ -1562,6 +1584,7 @@ function buildScenePanel(container, locId, sceneKey, sceneData) {
   container.innerHTML = `
     <div class="dm-scene-panel-header">
       <span class="dm-scene-panel-title">${icon} ${labelText}</span>
+      ${hasImage && sceneKey === "next" ? `<button class="dm-btn dm-btn-heal dm-btn-sm dm-scene-golive-btn" title="Make this the current scene">▶ Go Live</button>` : ""}
       ${hasImage ? `<button class="dm-btn-del dm-scene-clear-btn" title="Remove scene image">✕</button>` : ""}
     </div>
     ${hasImage ? `
@@ -1632,6 +1655,14 @@ function buildScenePanel(container, locId, sceneKey, sceneData) {
     container.querySelector(".dm-scene-clear-btn")?.addEventListener("click", async () => {
       if (!confirm("Remove this scene image and all its tokens?")) return;
       await saveScene(locId, sceneKey, null);
+    });
+
+    container.querySelector(".dm-scene-golive-btn")?.addEventListener("click", async () => {
+      const nextData = { ...(scenes[locId]?.next || sceneData) };
+      await updateDoc(doc(db, "scenes", locId), {
+        current: nextData,
+        next: deleteField(),
+      });
     });
 
   } else {
