@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Echoes Beneath — Spectator</title>
+  <link rel="stylesheet" href="css/spectator.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cinzel:wght@400;600&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <div class="stars" id="stars"></div>
+  <div class="stars stars-2" id="stars2"></div>
+
+  <header class="spec-header">
+    <div class="spec-logo">᚛ Echoes Beneath ᚜</div>
+    <div class="spec-location-name" id="specLocationName">Awaiting location…</div>
+    <div class="spec-live"><span class="spec-live-dot">⬤</span> Live</div>
+  </header>
+
+  <div class="spec-body">
+    <div class="spec-scene-col">
+      <div class="spec-scene-wrap" id="specSceneWrap">
+        <div class="spec-no-scene">Waiting for DM to select a location…</div>
+      </div>
+    </div>
+    <div class="spec-log-col">
+      <div class="spec-log-header">📜 Location Log</div>
+      <div class="spec-log-feed" id="specLogFeed">
+        <div class="spec-log-empty">No events yet…</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/spectator.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
