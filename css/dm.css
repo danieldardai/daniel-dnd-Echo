@@ -99,7 +99,7 @@
   display: flex;
   align-items: stretch;
   justify-content: center;
-  padding: 1rem;
+  padding: 0.5rem;
 }
 .dm-overlay.hidden { display: none; }
 
@@ -110,7 +110,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 1100px;
+  max-width: 1500px;
   box-shadow: 0 0 60px rgba(192,57,43,0.2), 0 16px 48px rgba(0,0,0,0.9);
   overflow: hidden;
 }
@@ -322,11 +322,11 @@
 }
 .dm-hp-cur {
   font-family: 'Cinzel Decorative', serif;
-  font-size: 2.2rem;
+  font-size: 1.8rem;
   color: #e8d5b7;
 }
-.dm-hp-sep { color: #5a4a3a; font-size: 1.5rem; }
-.dm-hp-max { font-family: 'Cinzel', serif; font-size: 1.4rem; color: #9a8a7a; }
+.dm-hp-sep { color: #5a4a3a; font-size: 1.2rem; }
+.dm-hp-max { font-family: 'Cinzel', serif; font-size: 1.1rem; color: #9a8a7a; }
 .dm-hp-label { font-family: 'Cinzel', serif; font-size: 0.75rem; color: #6a5a4a; letter-spacing: 0.1em; margin-left: 0.3rem; }
 
 .dm-hp-bar-track {
@@ -349,6 +349,18 @@
   flex-wrap: wrap;
 }
 .dm-hp-actions .dm-input { width: 80px; }
+
+/* ── Combat 2-column layout ──────────────────────────────── */
+.dm-combat-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 1.2rem;
+  align-items: start;
+}
+.dm-combat-col {
+  display: flex;
+  flex-direction: column;
+}
 
 /* ── Conditions ──────────────────────────────────────────── */
 .dm-conditions-grid {
@@ -968,7 +980,7 @@
 
 /* ── Encounter Sidebar (Monsters / NPCs) ────────────────── */
 .dm-encounter-sidebar {
-  width: 200px;
+  width: 240px;
   flex-shrink: 0;
   border-left: 1px solid #3a0808;
   display: flex;

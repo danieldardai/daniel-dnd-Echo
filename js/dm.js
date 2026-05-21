@@ -658,50 +658,60 @@ function renderCombatTab(char) {
   const ds = char.deathSaves || { successes: 0, failures: 0 };
 
   el.innerHTML = `
-    <div class="dm-section">
-      <h3 class="dm-section-title">Hit Points</h3>
-      <div class="dm-hp-display">
-        <span class="dm-hp-cur">${char.hp ?? 0}</span>
-        <span class="dm-hp-sep">/</span>
-        <span class="dm-hp-max">${char.hpMax ?? 0}</span>
-        <span class="dm-hp-label">HP</span>
-      </div>
-      <div class="dm-hp-bar-track">
-        <div class="dm-hp-bar-fill" style="width:${pct}%;background:${hpColor(pct)}"></div>
-      </div>
-      <div class="dm-hp-actions">
-        <input type="number" class="dm-input" id="dmHpAmt" min="0" max="9999" placeholder="Amount" />
-        <button class="dm-btn dm-btn-damage" id="dmBtnDamage">Damage</button>
-        <button class="dm-btn dm-btn-heal"   id="dmBtnHeal">Heal</button>
-        <button class="dm-btn dm-btn-neutral" id="dmBtnSetHP">Set HP</button>
-        <button class="dm-btn dm-btn-neutral" id="dmBtnSetMax">Set Max HP</button>
-      </div>
-    </div>
+    <div class="dm-combat-grid">
 
-    <div class="dm-section">
-      <h3 class="dm-section-title">Conditions</h3>
-      <div class="dm-conditions-grid" id="dmCondGrid"></div>
-    </div>
+      <!-- Left column: HP + Death Saves -->
+      <div class="dm-combat-col">
+        <div class="dm-section">
+          <h3 class="dm-section-title">Hit Points</h3>
+          <div class="dm-hp-display">
+            <span class="dm-hp-cur">${char.hp ?? 0}</span>
+            <span class="dm-hp-sep">/</span>
+            <span class="dm-hp-max">${char.hpMax ?? 0}</span>
+            <span class="dm-hp-label">HP</span>
+          </div>
+          <div class="dm-hp-bar-track">
+            <div class="dm-hp-bar-fill" style="width:${pct}%;background:${hpColor(pct)}"></div>
+          </div>
+          <div class="dm-hp-actions">
+            <input type="number" class="dm-input" id="dmHpAmt" min="0" max="9999" placeholder="Amount" />
+            <button class="dm-btn dm-btn-damage" id="dmBtnDamage">Damage</button>
+            <button class="dm-btn dm-btn-heal"   id="dmBtnHeal">Heal</button>
+            <button class="dm-btn dm-btn-neutral" id="dmBtnSetHP">Set HP</button>
+            <button class="dm-btn dm-btn-neutral" id="dmBtnSetMax">Set Max HP</button>
+          </div>
+        </div>
 
-    <div class="dm-section">
-      <h3 class="dm-section-title">Death Saves</h3>
-      <div class="dm-death-saves">
-        <div class="dm-saves-row">
-          <span class="dm-saves-label">Successes</span>
-          ${[0,1,2].map(i => `
-            <input type="checkbox" class="dm-save-check success" data-type="successes" data-i="${i}"
-              ${(ds.successes || 0) > i ? "checked" : ""} />
-          `).join("")}
+        <div class="dm-section">
+          <h3 class="dm-section-title">Death Saves</h3>
+          <div class="dm-death-saves">
+            <div class="dm-saves-row">
+              <span class="dm-saves-label">Successes</span>
+              ${[0,1,2].map(i => `
+                <input type="checkbox" class="dm-save-check success" data-type="successes" data-i="${i}"
+                  ${(ds.successes || 0) > i ? "checked" : ""} />
+              `).join("")}
+            </div>
+            <div class="dm-saves-row">
+              <span class="dm-saves-label">Failures</span>
+              ${[0,1,2].map(i => `
+                <input type="checkbox" class="dm-save-check failure" data-type="failures" data-i="${i}"
+                  ${(ds.failures || 0) > i ? "checked" : ""} />
+              `).join("")}
+            </div>
+            <button class="dm-btn dm-btn-neutral" id="dmBtnClearDS" style="margin-top:0.4rem">Clear All</button>
+          </div>
         </div>
-        <div class="dm-saves-row">
-          <span class="dm-saves-label">Failures</span>
-          ${[0,1,2].map(i => `
-            <input type="checkbox" class="dm-save-check failure" data-type="failures" data-i="${i}"
-              ${(ds.failures || 0) > i ? "checked" : ""} />
-          `).join("")}
-        </div>
-        <button class="dm-btn dm-btn-neutral" id="dmBtnClearDS" style="margin-top:0.4rem">Clear All</button>
       </div>
+
+      <!-- Right column: Conditions -->
+      <div class="dm-combat-col">
+        <div class="dm-section">
+          <h3 class="dm-section-title">Conditions</h3>
+          <div class="dm-conditions-grid" id="dmCondGrid"></div>
+        </div>
+      </div>
+
     </div>
   `;
 
