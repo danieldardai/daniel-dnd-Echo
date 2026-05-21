@@ -112,6 +112,7 @@ let selectedEncType   = "monster";   // "monster" | "npc"
 let selectedSceneLocId = null;
 let movingToken        = null;   // { locId, sceneKey, token } — token selected for click-to-move
 let pinnedMonsterId    = null;   // monsterId pinned to top of encounter list
+let spectatorLocId     = null;   // locationId shown on spectator screen
 let dmUnlocked        = false;
 let unsubCharacters   = null;
 let unsubLocations    = null;
@@ -530,6 +531,16 @@ function startListening() {
       () => renderEncounterSidebar()
     );
   }
+
+  // Spectator config listener — sync tick state
+  onSnapshot(doc(db, "spectator", "config"), snap => {
+    spectatorLocId = snap.data()?.locationId ?? null;
+    document.querySelectorAll(".dm-loc-spectator-radio").forEach(radio => {
+      const active = radio.value === spectatorLocId;
+      radio.checked = active;
+      radio.closest(".dm-loc-spectator-label")?.classList.toggle("active", active);
+    });
+  });
 
   // Scenes listener
   if (!unsubScenes) {
@@ -1279,6 +1290,27 @@ function makeLocColumn(locId, emoji, name, locData, chars) {
   }
 
   if (!isUnassigned) {
+    const spectLabel = document.createElement("label");
+    spectLabel.className = "dm-loc-spectator-label" + (locId === spectatorLocId ? " active" : "");
+    spectLabel.title = "Show on spectator screen";
+    const spectRadio = document.createElement("input");
+    spectRadio.type      = "radio";
+    spectRadio.name      = "spectatorLoc";
+    spectRadio.className = "dm-loc-spectator-radio";
+    spectRadio.value     = locId;
+    spectRadio.checked   = locId === spectatorLocId;
+    spectRadio.addEventListener("change", async () => {
+      spectatorLocId = locId;
+      document.querySelectorAll(".dm-loc-spectator-label").forEach(l => l.classList.remove("active"));
+      spectLabel.classList.add("active");
+      await setDoc(doc(db, "spectator", "config"), { locationId: locId });
+    });
+    const spectIcon = document.createElement("span");
+    spectIcon.textContent = "📺";
+    spectLabel.appendChild(spectRadio);
+    spectLabel.appendChild(spectIcon);
+    header.appendChild(spectLabel);
+
     const delBtn = document.createElement("button");
     delBtn.className = "dm-btn-del dm-loc-del";
     delBtn.title = "Delete location";

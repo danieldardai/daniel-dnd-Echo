@@ -1,6 +1,6 @@
 import { db } from "./firebase-config.js";
 import {
-  collection, doc, onSnapshot, orderBy, query, setDoc
+  collection, onSnapshot, orderBy, query
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const grid      = document.getElementById("characterGrid");
@@ -9,12 +9,11 @@ const emptyEl   = document.getElementById("emptyState");
 const errorEl   = document.getElementById("errorState");
 const errorMsg  = document.getElementById("errorMessage");
 
-let charData       = {};
-let locationData   = {};
-let cardMap        = {};
-let charsLoaded    = false;
-let locsLoaded     = false;
-let spectatorLocId = null;   // currently selected spectator location
+let charData     = {};
+let locationData = {};
+let cardMap      = {};
+let charsLoaded  = false;
+let locsLoaded   = false;
 
 // ── Card helpers ──────────────────────────────────────────
 
@@ -116,7 +115,7 @@ function rerender() {
   sortedLocs.forEach(loc => {
     const inLoc = chars.filter(c => c.locationId === loc.id);
     if (!inLoc.length) return;
-    const section = makeSection(loc.emoji || "🗺️", loc.name, loc.description || "", inLoc, loc.id);
+    const section = makeSection(loc.emoji || "🗺️", loc.name, loc.description || "", inLoc);
     grid.appendChild(section);
   });
 
@@ -127,39 +126,24 @@ function rerender() {
       showHeader ? "🌐" : null,
       showHeader ? "Unassigned" : null,
       "",
-      unassigned,
-      null
+      unassigned
     );
     grid.appendChild(section);
   }
 }
 
-function makeSection(emoji, name, desc, chars, locId) {
+function makeSection(emoji, name, desc, chars) {
   const section = document.createElement("div");
   section.className = "location-section";
 
   if (name) {
-    const isSelected = locId && locId === spectatorLocId;
     section.innerHTML = `
       <div class="location-section-header">
         <span class="location-section-emoji">${emoji}</span>
         <span class="location-section-name">${name}</span>
         ${desc ? `<span class="location-section-desc">${desc}</span>` : ""}
-        ${locId ? `<label class="spectator-loc-label${isSelected ? " active" : ""}" title="Show on spectator screen">
-          <input type="radio" name="spectatorLoc" class="spectator-loc-radio" value="${locId}"${isSelected ? " checked" : ""} />
-          <span class="spectator-loc-icon">📺</span>
-          <span class="spectator-loc-text">Spectator</span>
-        </label>` : ""}
       </div>
     `;
-    if (locId) {
-      section.querySelector(".spectator-loc-radio").addEventListener("change", async () => {
-        spectatorLocId = locId;
-        document.querySelectorAll(".spectator-loc-label").forEach(l => l.classList.remove("active"));
-        section.querySelector(".spectator-loc-label").classList.add("active");
-        await setDoc(doc(db, "spectator", "config"), { locationId: locId });
-      });
-    }
   }
 
   const cardGrid = document.createElement("div");
@@ -211,19 +195,6 @@ onSnapshot(
     console.error("Firestore error:", err);
   }
 );
-
-// ── Spectator config listener ─────────────────────────────
-
-onSnapshot(doc(db, "spectator", "config"), snap => {
-  const locId = snap.data()?.locationId ?? null;
-  if (locId === spectatorLocId) return;
-  spectatorLocId = locId;
-  // Sync radio state without full rerender
-  document.querySelectorAll(".spectator-loc-radio").forEach(radio => {
-    radio.checked = (radio.value === spectatorLocId);
-    radio.closest(".spectator-loc-label")?.classList.toggle("active", radio.checked);
-  });
-});
 
 // ── Locations listener ────────────────────────────────────
 
