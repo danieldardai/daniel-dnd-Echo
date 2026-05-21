@@ -1263,16 +1263,18 @@ function renderSceneTokens(tokenLayer, widthM, heightM, tokens) {
       if (!m) return; // monster deleted — skip orphaned token
       const sizeX = token.sizeX || 1;
       const sizeY = token.sizeY || 1;
-      const icon = m.type === "npc" ? "👤" : "💀";
+      const icon    = m.type === "npc" ? "👤" : "💀";
+      const isDead  = (m.hp ?? 0) <= 0;
       const div = document.createElement("div");
-      div.className = "campaign-scene-token";
+      div.className = "campaign-scene-token" + (isDead ? " campaign-scene-token--dead" : "");
       div.style.left   = `${(token.x / cols) * 100}%`;
       div.style.top    = `${(token.y / rows) * 100}%`;
       div.style.width  = `${(sizeX / cols) * 100}%`;
       div.style.height = `${(sizeY / rows) * 100}%`;
       div.innerHTML = `
         <div class="campaign-scene-token-bubble"><span class="campaign-scene-bubble-emoji">${icon}</span><span class="campaign-scene-bubble-name">${m.name || "?"}</span></div>
-        <div class="campaign-scene-token-marker campaign-scene-token-marker--enc"></div>`;
+        <div class="campaign-scene-token-marker campaign-scene-token-marker--enc"></div>
+        <div class="scene-token-dead-x">✕</div>`;
       tokenLayer.appendChild(div);
     }
   });

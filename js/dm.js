@@ -1815,6 +1815,7 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
         <div class="dm-scene-token-marker dm-scene-token-marker--enc" style="border-color:${ringColor}">
           <span class="dm-scene-marker-emoji">${icon}</span>
         </div>
+        <div class="scene-token-dead-x">✕</div>
         <button class="dm-scene-token-remove" title="Remove">✕</button>
       `;
       div.querySelector(".dm-scene-token-remove").addEventListener("click", async e => {

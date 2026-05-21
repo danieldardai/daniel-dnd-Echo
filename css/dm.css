@@ -1487,20 +1487,22 @@
 /* Dead monster token (HP = 0) */
 .dm-scene-token--dead .dm-scene-token-bubble { opacity: 0.4; }
 .dm-scene-token--dead .dm-scene-token-marker { opacity: 0.4; }
-.dm-scene-token--dead .dm-scene-token-marker::after {
-  content: '✕';
+.scene-token-dead-x {
+  display: none;
   position: absolute;
-  inset: 0;
-  display: flex;
+  inset: 8%;
+  border-radius: 6px;
+  z-index: 30;
   align-items: center;
   justify-content: center;
   color: #c0392b;
-  font-size: 1.2em;
+  font-size: 1.1em;
   font-weight: bold;
   pointer-events: none;
-  background: rgba(0,0,0,0.35);
-  text-shadow: 0 0 6px rgba(192,57,43,0.9);
+  background: rgba(0,0,0,0.5);
+  text-shadow: 0 0 4px rgba(0,0,0,0.9);
 }
+.dm-scene-token--dead .scene-token-dead-x { display: flex; }
 
 /* Click-to-move: selected token */
 .dm-scene-token--moving .dm-scene-token-bubble {
