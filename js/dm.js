@@ -521,6 +521,11 @@ function startListening() {
           else monsters[id] = { id, ...change.doc.data() };
         });
         renderEncounterSidebar();
+        // Update dead/alive state on scene tokens without a full panel rebuild
+        document.querySelectorAll(".dm-scene-token[data-monster-id]").forEach(el => {
+          const m = monsters[el.dataset.monsterId];
+          if (m) el.classList.toggle("dm-scene-token--dead", (m.hp ?? 0) <= 0);
+        });
       },
       () => renderEncounterSidebar()
     );
@@ -1796,11 +1801,12 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
       const icon      = m.type === "npc" ? "👤" : "💀";
 
       div = document.createElement("div");
-      div.className    = "dm-scene-token" + ((m.hp ?? 0) <= 0 ? " dm-scene-token--dead" : "");
-      div.style.left   = `${(token.x / cols) * 100}%`;
-      div.style.top    = `${(token.y / rows) * 100}%`;
-      div.style.width  = `${(sizeX / cols) * 100}%`;
-      div.style.height = `${(sizeY / rows) * 100}%`;
+      div.className          = "dm-scene-token" + ((m.hp ?? 0) <= 0 ? " dm-scene-token--dead" : "");
+      div.dataset.monsterId  = token.monsterId;
+      div.style.left         = `${(token.x / cols) * 100}%`;
+      div.style.top          = `${(token.y / rows) * 100}%`;
+      div.style.width        = `${(sizeX / cols) * 100}%`;
+      div.style.height       = `${(sizeY / rows) * 100}%`;
       div.innerHTML = `
         <div class="dm-scene-token-bubble">
           <span class="dm-scene-bubble-emoji">${icon}</span>
