@@ -124,6 +124,47 @@ Reference this before modifying any system to understand context and constraints
   }
   ```
 
+### Session 12 — Click-to-move tokens + click monster to focus in sidebar
+
+#### Monster focus (`js/dm.js`, `css/dm.css`)
+- **State:** `let pinnedMonsterId = null` — monsterId sorted to top of encounter list
+- **`renderEncounterList()`** sort: pinned monster always first, others by `createdAt`; pinned card gets `dm-enc-card--pinned` class
+- **`renderTokens()` — monster tokens:** click listener on `.dm-scene-token-marker` (the circle/rect body):
+  - `e.stopPropagation()` prevents layer click from firing
+  - Switches `selectedEncType` and active filter button if the monster is an NPC
+  - Sets `pinnedMonsterId = token.monsterId`, calls `renderEncounterList()`, scrolls `#dmEncList` to top
+- **`css/dm.css`:** `.dm-scene-token-marker--enc { cursor: pointer }` (hints at clickability); `.dm-enc-card--pinned` — gold border + subtle glow
+
+#### Click-to-move tokens on scene map
+
+#### Overview
+Clicking a token's name bubble enters **move mode**: the token glows gold and pulses, other tokens dim, the map cursor becomes a crosshair. Clicking anywhere on the map places the token at that grid cell (saved to Firestore). Clicking the same bubble again or pressing Escape cancels.
+
+#### Changes (`js/dm.js`)
+- **State:** `let movingToken = null` — `{ locId, sceneKey, token }` when a token is selected for moving
+- **`clearMoveMode()`** — new helper; sets `movingToken = null`, removes `.dm-scene-token--moving` from all tokens and `.move-mode` from all token layers via `document.querySelectorAll`
+- **Escape key:** module-level `document.addEventListener("keydown", ...)` calls `clearMoveMode()` if `movingToken` is set
+- **`renderTokens()`** — for each token (char + monster):
+  - Bubble `pointer-events` changed to `auto` (was `none` in CSS)
+  - Click listener on `.dm-scene-token-bubble`: toggle move mode for this token; `e.stopPropagation()` prevents click from reaching token layer
+  - After creating div: if `movingToken` matches this token, add `.dm-scene-token--moving` immediately (restores visual state after Firestore re-render while in move mode)
+  - Remove-button handler: calls `clearMoveMode()` if the removed token was the moving one
+  - After the `tokens.forEach` loop: if `movingToken` matches this locId/sceneKey, add `.move-mode` to tokenLayer
+- **`setupTokenDropZone()`** — added `click` listener before the `dragover` listener:
+  - Bails if `movingToken` is not set or targets a different scene
+  - Calls `clearMoveMode()` before `saveScene()` so Firestore re-render doesn't re-apply move mode
+  - Computes grid cell from click coordinates using same math as the drop handler
+
+#### Changes (`css/dm.css`)
+- `.dm-scene-token-bubble`: `pointer-events: auto; cursor: pointer; transition: border-color, box-shadow` (was `pointer-events: none`)
+- `.dm-scene-token-bubble:hover`: subtle border highlight
+- `.dm-scene-token--moving .dm-scene-token-bubble`: gold border + background glow
+- `.dm-scene-token--moving .dm-scene-token-marker`: pulsing gold box-shadow animation (`token-move-pulse`)
+- `.dm-scene-token-layer.move-mode`: `cursor: crosshair`
+- `.dm-scene-token-layer.move-mode .dm-scene-token:not(.dm-scene-token--moving)`: `opacity: 0.4; pointer-events: none` (dims and blocks interaction with non-selected tokens)
+
+---
+
 ### Session 11 — DM Scenes tab: dropdown + Go Live + character filter
 
 #### Overview

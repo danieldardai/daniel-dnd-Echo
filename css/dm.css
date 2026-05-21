@@ -1027,6 +1027,10 @@
   flex-direction: column;
   gap: 0.3rem;
 }
+.dm-enc-card--pinned {
+  border-color: #c8a840;
+  box-shadow: 0 0 8px rgba(200,168,64,0.25);
+}
 .dm-enc-card-top {
   display: flex;
   align-items: center;
@@ -1391,9 +1395,14 @@
   align-items: center;
   gap: 0.18rem;
   white-space: nowrap;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
   z-index: 100;
   box-shadow: 0 3px 10px rgba(0,0,0,0.7);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.dm-scene-token-bubble:hover {
+  border-color: rgba(232,213,183,0.5);
 }
 /* Arrow pointing down from bubble to marker */
 .dm-scene-token-bubble::after {
@@ -1447,9 +1456,10 @@
   text-align: center;
 }
 
-/* Monster/NPC marker — rectangle instead of circle */
+/* Monster/NPC marker — rectangle instead of circle, clickable to focus in sidebar */
 .dm-scene-token-marker--enc {
   border-radius: 6px;
+  cursor: pointer;
 }
 
 /* Remove button (hover) */
@@ -1473,6 +1483,27 @@
   line-height: 1;
 }
 .dm-scene-token:hover .dm-scene-token-remove { display: flex; }
+
+/* Click-to-move: selected token */
+.dm-scene-token--moving .dm-scene-token-bubble {
+  border-color: #c8a840;
+  background: rgba(200,168,64,0.22);
+  box-shadow: 0 0 10px rgba(200,168,64,0.55);
+}
+.dm-scene-token--moving .dm-scene-token-marker {
+  animation: token-move-pulse 0.9s ease-in-out infinite alternate;
+}
+@keyframes token-move-pulse {
+  from { box-shadow: 0 0 6px rgba(200,168,64,0.5); }
+  to   { box-shadow: 0 0 18px rgba(200,168,64,0.95); }
+}
+
+/* Click-to-move: map cursor + dim non-selected tokens */
+.dm-scene-token-layer.move-mode { cursor: crosshair; }
+.dm-scene-token-layer.move-mode .dm-scene-token:not(.dm-scene-token--moving) {
+  opacity: 0.4;
+  pointer-events: none;
+}
 
 /* Scale row */
 .dm-scene-scale-row {

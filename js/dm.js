@@ -110,6 +110,8 @@ let selectedTurnLocId  = "__global__";
 let selectedCharId    = null;
 let selectedEncType   = "monster";   // "monster" | "npc"
 let selectedSceneLocId = null;
+let movingToken        = null;   // { locId, sceneKey, token } — token selected for click-to-move
+let pinnedMonsterId    = null;   // monsterId pinned to top of encounter list
 let dmUnlocked        = false;
 let unsubCharacters   = null;
 let unsubLocations    = null;
@@ -1407,7 +1409,11 @@ function renderEncounterList() {
 
   const filtered = Object.values(monsters)
     .filter(m => m.type === selectedEncType)
-    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
+    .sort((a, b) => {
+      if (a.id === pinnedMonsterId) return -1;
+      if (b.id === pinnedMonsterId) return 1;
+      return (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
+    });
 
   if (!filtered.length) {
     const label = selectedEncType === "monster" ? "monsters" : "NPCs";
@@ -1424,7 +1430,7 @@ function renderEncounterList() {
       ? `<span class="dm-enc-size-badge">${m.sizeX || 1}×${m.sizeY || 1}m</span>` : "";
 
     const card = document.createElement("div");
-    card.className = "dm-enc-card";
+    card.className = "dm-enc-card" + (m.id === pinnedMonsterId ? " dm-enc-card--pinned" : "");
     card.draggable = true;
     card.innerHTML = `
       <div class="dm-enc-card-top">
@@ -1706,6 +1712,13 @@ function drawGrid(canvas, natW, natH, widthM) {
   }
 }
 
+function clearMoveMode() {
+  movingToken = null;
+  document.querySelectorAll(".dm-scene-token--moving").forEach(el => el.classList.remove("dm-scene-token--moving"));
+  document.querySelectorAll(".dm-scene-token-layer.move-mode").forEach(el => el.classList.remove("move-mode"));
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && movingToken) clearMoveMode(); });
+
 function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
   tokenLayer.innerHTML = "";
   const cols = Math.ceil(widthM);
@@ -1746,6 +1759,7 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
       `;
       div.querySelector(".dm-scene-token-remove").addEventListener("click", async e => {
         e.stopPropagation();
+        if (movingToken?.token.charId === token.charId) clearMoveMode();
         const cur = scenes[locId]?.[sceneKey];
         if (!cur) return;
         await saveScene(locId, sceneKey, {
@@ -1755,6 +1769,22 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
           ),
         });
       });
+      div.querySelector(".dm-scene-token-bubble").addEventListener("click", e => {
+        e.stopPropagation();
+        if (movingToken?.locId === locId && movingToken?.sceneKey === sceneKey &&
+            movingToken?.token.charId === token.charId) {
+          clearMoveMode();
+        } else {
+          clearMoveMode();
+          movingToken = { locId, sceneKey, token };
+          div.classList.add("dm-scene-token--moving");
+          tokenLayer.classList.add("move-mode");
+        }
+      });
+      if (movingToken?.locId === locId && movingToken?.sceneKey === sceneKey &&
+          movingToken?.token.charId === token.charId) {
+        div.classList.add("dm-scene-token--moving");
+      }
 
     } else if (token.monsterId) {
       const m = monsters[token.monsterId];
@@ -1783,6 +1813,7 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
       `;
       div.querySelector(".dm-scene-token-remove").addEventListener("click", async e => {
         e.stopPropagation();
+        if (movingToken?.token.monsterId === token.monsterId) clearMoveMode();
         const cur = scenes[locId]?.[sceneKey];
         if (!cur) return;
         await saveScene(locId, sceneKey, {
@@ -1792,17 +1823,74 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
           ),
         });
       });
+      div.querySelector(".dm-scene-token-bubble").addEventListener("click", e => {
+        e.stopPropagation();
+        if (movingToken?.locId === locId && movingToken?.sceneKey === sceneKey &&
+            movingToken?.token.monsterId === token.monsterId) {
+          clearMoveMode();
+        } else {
+          clearMoveMode();
+          movingToken = { locId, sceneKey, token };
+          div.classList.add("dm-scene-token--moving");
+          tokenLayer.classList.add("move-mode");
+        }
+      });
+      div.querySelector(".dm-scene-token-marker").addEventListener("click", e => {
+        e.stopPropagation();
+        const mType = m.type === "npc" ? "npc" : "monster";
+        if (selectedEncType !== mType) {
+          selectedEncType = mType;
+          document.querySelectorAll(".dm-enc-filter-btn").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.type === selectedEncType);
+          });
+        }
+        pinnedMonsterId = token.monsterId;
+        renderEncounterList();
+        document.getElementById("dmEncList")?.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      if (movingToken?.locId === locId && movingToken?.sceneKey === sceneKey &&
+          movingToken?.token.monsterId === token.monsterId) {
+        div.classList.add("dm-scene-token--moving");
+      }
     } else {
       return;
     }
 
     tokenLayer.appendChild(div);
   });
+
+  if (movingToken?.locId === locId && movingToken?.sceneKey === sceneKey) {
+    tokenLayer.classList.add("move-mode");
+  }
 }
 
 function setupTokenDropZone(tokenLayer, widthM, heightM, locId, sceneKey) {
   const cols = Math.ceil(widthM);
   const rows = Math.ceil(heightM);
+
+  tokenLayer.addEventListener("click", async e => {
+    if (!movingToken || movingToken.locId !== locId || movingToken.sceneKey !== sceneKey) return;
+    const rect = tokenLayer.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top)  / rect.height;
+    const { token: mToken } = movingToken;
+    const cur = scenes[locId]?.[sceneKey];
+    if (!cur) { clearMoveMode(); return; }
+    clearMoveMode();
+    if (mToken.charId) {
+      const x = Math.max(0, Math.min(cols - 1, Math.floor(relX * cols)));
+      const y = Math.max(0, Math.min(rows - 1, Math.floor(relY * rows)));
+      const existing = (cur.tokens || []).filter(t => t.charId !== mToken.charId);
+      await saveScene(locId, sceneKey, { ...cur, tokens: [...existing, { charId: mToken.charId, x, y }] });
+    } else if (mToken.monsterId) {
+      const sizeX = mToken.sizeX || 1;
+      const sizeY = mToken.sizeY || 1;
+      const x = Math.max(0, Math.min(cols - sizeX, Math.floor(relX * cols)));
+      const y = Math.max(0, Math.min(rows - sizeY, Math.floor(relY * rows)));
+      const existing = (cur.tokens || []).filter(t => t.monsterId !== mToken.monsterId);
+      await saveScene(locId, sceneKey, { ...cur, tokens: [...existing, { monsterId: mToken.monsterId, x, y, sizeX, sizeY }] });
+    }
+  });
 
   tokenLayer.addEventListener("dragover", e => {
     e.preventDefault();
