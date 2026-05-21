@@ -104,6 +104,7 @@ const PHASE_ICONS = {
 let characters        = {};
 let locations         = {};
 let monsters          = {};          // id → monster/npc doc
+let byParent          = {};          // parentId → [instance docs]
 let scenes            = {};          // locId → { current, next }
 let allTurnStates     = {};          // locationId → turnData
 let selectedTurnLocId  = "__global__";
@@ -1444,86 +1445,132 @@ function renderEncounterList() {
   if (!listEl) return;
   listEl.innerHTML = "";
 
-  const filtered = Object.values(monsters)
-    .filter(m => m.type === selectedEncType)
-    .sort((a, b) => {
-      if (a.id === pinnedMonsterId) return -1;
-      if (b.id === pinnedMonsterId) return 1;
-      return (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
-    });
+  const all = Object.values(monsters).filter(m => m.type === selectedEncType);
 
-  if (!filtered.length) {
+  // Build parent → instances map (module-level so makeMonsterCard can read it)
+  byParent = {};
+  all.filter(m => m.parentId).forEach(m => {
+    (byParent[m.parentId] = byParent[m.parentId] || []).push(m);
+  });
+  Object.values(byParent).forEach(arr =>
+    arr.sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0))
+  );
+
+  // Root monsters (no parentId), sorted with pinned group first
+  const roots = all.filter(m => !m.parentId).sort((a, b) => {
+    const aPinned = a.id === pinnedMonsterId || (byParent[a.id] || []).some(i => i.id === pinnedMonsterId);
+    const bPinned = b.id === pinnedMonsterId || (byParent[b.id] || []).some(i => i.id === pinnedMonsterId);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+    return (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
+  });
+
+  if (!roots.length) {
     const label = selectedEncType === "monster" ? "monsters" : "NPCs";
     listEl.innerHTML = `<div class="dm-empty">No ${label} yet.</div>`;
     return;
   }
 
-  filtered.forEach(m => {
-    const pct      = m.hpMax ? Math.min(100, Math.max(0, Math.round((m.hp / m.hpMax) * 100))) : 100;
-    const barColor = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
-    const hpClass  = pct <= 30 ? "low" : pct <= 60 ? "mid" : "";
-
-    const sizeBadge = m.type === "monster"
-      ? `<span class="dm-enc-size-badge">${m.sizeX || 1}×${m.sizeY || 1}m</span>` : "";
-
-    const card = document.createElement("div");
-    card.className = "dm-enc-card" + (m.id === pinnedMonsterId ? " dm-enc-card--pinned" : "");
-    card.draggable = true;
-    card.innerHTML = `
-      <div class="dm-enc-card-top">
-        <span class="dm-enc-name">${m.name}</span>
-        ${sizeBadge}
-        <button class="dm-btn-del dm-enc-del" title="Remove">✕</button>
-      </div>
-      <div class="dm-enc-bar-track">
-        <div class="dm-enc-bar-fill" style="width:${pct}%;background:${barColor}"></div>
-      </div>
-      <div class="dm-enc-hp-label dm-char-hp ${hpClass}">${m.hp} / ${m.hpMax} HP</div>
-      <div class="dm-enc-actions">
-        <input type="number" class="dm-input dm-enc-amt" placeholder="Amt" min="1" />
-        <button class="dm-btn dm-btn-damage dm-btn-sm dm-enc-dmg">Dmg</button>
-        <button class="dm-btn dm-btn-heal   dm-btn-sm dm-enc-heal">Heal</button>
-      </div>
-    `;
-
-    card.addEventListener("dragstart", e => {
-      e.dataTransfer.setData("monsterId", m.id);
-      e.dataTransfer.effectAllowed = "copy";
+  roots.forEach(root => {
+    const instances = (byParent[root.id] || []).slice().sort((a, b) => {
+      if (a.id === pinnedMonsterId) return -1;
+      if (b.id === pinnedMonsterId) return 1;
+      return (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
     });
-
-    const mRef     = doc(db, "monsters", m.id);
-    const amtInput = card.querySelector(".dm-enc-amt");
-
-    card.querySelector(".dm-enc-dmg").addEventListener("click", async () => {
-      const amt = parseInt(amtInput.value) || 0;
-      if (!amt) return;
-      const cur   = monsters[m.id]?.hp ?? 0;
-      const newHp = Math.max(0, cur - amt);
-      await updateDoc(mRef, { hp: newHp });
-      await addDoc(collection(db, "sessionLog"), {
-        type: "damage", actor: "DM",
-        message: `${m.name} took ${amt} damage (${newHp}/${m.hpMax} HP)`,
-        timestamp: serverTimestamp(), charId: null,
-      });
-      amtInput.value = "";
-    });
-
-    card.querySelector(".dm-enc-heal").addEventListener("click", async () => {
-      const amt = parseInt(amtInput.value) || 0;
-      if (!amt) return;
-      const cur   = monsters[m.id]?.hp ?? 0;
-      const newHp = Math.min(m.hpMax, cur + amt);
-      await updateDoc(mRef, { hp: newHp });
-      amtInput.value = "";
-    });
-
-    card.querySelector(".dm-enc-del").addEventListener("click", async () => {
-      if (!confirm(`Remove "${m.name}"?`)) return;
-      await deleteDoc(doc(db, "monsters", m.id));
-    });
-
-    listEl.appendChild(card);
+    listEl.appendChild(makeMonsterCard(root, false, instances.length));
+    instances.forEach((inst, idx) => listEl.appendChild(makeMonsterCard(inst, true, idx + 1)));
   });
+}
+
+function makeMonsterCard(m, isInstance, instanceCountOrNum) {
+  const pct      = m.hpMax ? Math.min(100, Math.max(0, Math.round((m.hp / m.hpMax) * 100))) : 100;
+  const barColor = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
+  const hpClass  = pct <= 30 ? "low" : pct <= 60 ? "mid" : "";
+  const label    = isInstance ? `${m.name} #${instanceCountOrNum}` : m.name;
+
+  const sizeBadge = !isInstance && m.type === "monster"
+    ? `<span class="dm-enc-size-badge">${m.sizeX || 1}×${m.sizeY || 1}m</span>` : "";
+  const instBadge = !isInstance && instanceCountOrNum > 0
+    ? `<span class="dm-enc-inst-count" title="${instanceCountOrNum} extra instance(s)">+${instanceCountOrNum}</span>` : "";
+  const addInstBtn = !isInstance
+    ? `<button class="dm-enc-add-inst" title="Add instance">＋</button>` : "";
+
+  const card = document.createElement("div");
+  card.className = [
+    "dm-enc-card",
+    m.id === pinnedMonsterId ? "dm-enc-card--pinned" : "",
+    isInstance ? "dm-enc-card--instance" : "",
+  ].filter(Boolean).join(" ");
+  card.draggable = true;
+  card.innerHTML = `
+    <div class="dm-enc-card-top">
+      <span class="dm-enc-name">${label}</span>
+      ${sizeBadge}${instBadge}${addInstBtn}
+      <button class="dm-btn-del dm-enc-del" title="Remove">✕</button>
+    </div>
+    <div class="dm-enc-bar-track">
+      <div class="dm-enc-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+    </div>
+    <div class="dm-enc-hp-label dm-char-hp ${hpClass}">${m.hp} / ${m.hpMax} HP</div>
+    <div class="dm-enc-actions">
+      <input type="number" class="dm-input dm-enc-amt" placeholder="Amt" min="1" />
+      <button class="dm-btn dm-btn-damage dm-btn-sm dm-enc-dmg">Dmg</button>
+      <button class="dm-btn dm-btn-heal   dm-btn-sm dm-enc-heal">Heal</button>
+    </div>
+  `;
+
+  card.addEventListener("dragstart", e => {
+    e.dataTransfer.setData("monsterId", m.id);
+    e.dataTransfer.effectAllowed = "copy";
+  });
+
+  // Spawn new instance
+  card.querySelector(".dm-enc-add-inst")?.addEventListener("click", async e => {
+    e.stopPropagation();
+    await addDoc(collection(db, "monsters"), {
+      name: m.name, hp: m.hpMax, hpMax: m.hpMax,
+      type: m.type, sizeX: m.sizeX || 1, sizeY: m.sizeY || 1,
+      parentId: m.id,
+      createdAt: serverTimestamp(),
+    });
+  });
+
+  const mRef     = doc(db, "monsters", m.id);
+  const amtInput = card.querySelector(".dm-enc-amt");
+
+  card.querySelector(".dm-enc-dmg").addEventListener("click", async () => {
+    const amt = parseInt(amtInput.value) || 0;
+    if (!amt) return;
+    const cur   = monsters[m.id]?.hp ?? 0;
+    const newHp = Math.max(0, cur - amt);
+    await updateDoc(mRef, { hp: newHp });
+    await addDoc(collection(db, "sessionLog"), {
+      type: "damage", actor: "DM",
+      message: `${label} took ${amt} damage (${newHp}/${m.hpMax} HP)`,
+      timestamp: serverTimestamp(), charId: null,
+    });
+    amtInput.value = "";
+  });
+
+  card.querySelector(".dm-enc-heal").addEventListener("click", async () => {
+    const amt = parseInt(amtInput.value) || 0;
+    if (!amt) return;
+    const cur   = monsters[m.id]?.hp ?? 0;
+    const newHp = Math.min(m.hpMax, cur + amt);
+    await updateDoc(mRef, { hp: newHp });
+    amtInput.value = "";
+  });
+
+  card.querySelector(".dm-enc-del").addEventListener("click", async () => {
+    const hasInsts = !isInstance && (byParent[m.id]?.length ?? 0) > 0;
+    if (!confirm(`Remove "${label}"${hasInsts ? " and all its instances?" : "?"}`)) return;
+    if (hasInsts) {
+      await Promise.all((byParent[m.id] || []).map(i => deleteDoc(doc(db, "monsters", i.id))));
+    }
+    await deleteDoc(doc(db, "monsters", m.id));
+  });
+
+  return card;
 }
 
 function makeCharChip(char) {

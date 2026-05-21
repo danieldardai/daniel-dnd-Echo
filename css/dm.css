@@ -1146,6 +1146,37 @@
   flex-shrink: 0;
 }
 
+/* ── Monster Instances ───────────────────────────────────── */
+.dm-enc-card--instance {
+  margin-left: 10px;
+  border-left: 2px solid rgba(192,57,43,0.3);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.dm-enc-add-inst {
+  flex-shrink: 0;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.82rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(232,213,183,0.18);
+  border-radius: 3px;
+  color: #e8d5b7;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dm-enc-add-inst:hover {
+  background: rgba(46,204,113,0.15);
+  border-color: rgba(46,204,113,0.4);
+}
+.dm-enc-inst-count {
+  font-family: 'Cinzel', serif;
+  font-size: 0.58rem;
+  color: rgba(192,57,43,0.7);
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+
 /* ── Spells Tab ──────────────────────────────────────────── */
 .dm-spells-hint {
   font-family: 'Crimson Pro', serif;
