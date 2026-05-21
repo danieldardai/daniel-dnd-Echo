@@ -1762,7 +1762,7 @@ function buildScenePanel(container, locId, sceneKey, sceneData) {
       if (scenes[locId]?.next?.image) {
         if (!confirm("Next Scene already has a map. Overwrite it?")) return;
       }
-      await saveScene(locId, "next", { image: cur.image, widthM: cur.widthM || 20, heightM: cur.heightM || 20, tokens: [] });
+      await saveScene(locId, "next", { image: cur.image, widthM: cur.widthM || 20, heightM: cur.heightM || 20, tokens: [...(cur.tokens || [])] });
     });
 
   } else {
