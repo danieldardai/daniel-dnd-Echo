@@ -532,6 +532,65 @@ function renderGeneralActions() {
   sendBtn.className = "action-btn btn-narrate";
   sendBtn.textContent = "✨ Narrate";
   sendRow.appendChild(statusEl);
+
+  // Speech-to-text mic button (Web Speech API)
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRecognition) {
+    const micBtn = document.createElement("button");
+    micBtn.type = "button";
+    micBtn.className = "action-btn btn-mic";
+    micBtn.title = "Speak your action";
+    micBtn.innerHTML = "🎙";
+    sendRow.appendChild(micBtn);
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous   = true;   // keep listening until manually stopped
+    recognition.interimResults = true; // show live preview in status
+    // Use browser language — handles EN/HU naturally
+    recognition.lang = navigator.language || "en-US";
+
+    let listening = false;
+
+    recognition.onstart = () => {
+      listening = true;
+      micBtn.classList.add("recording");
+      micBtn.title = "Stop recording";
+      statusEl.textContent = "🎙 Listening…";
+    };
+
+    recognition.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          // Append finalised words to textarea
+          const cur = textarea.value;
+          textarea.value = (cur && !cur.endsWith(" ") ? cur + " " : cur) + t.trim();
+        } else {
+          interim += t;
+        }
+      }
+      statusEl.textContent = interim ? `🎙 ${interim}` : "🎙 Listening…";
+    };
+
+    const stopListening = () => {
+      listening = false;
+      micBtn.classList.remove("recording");
+      micBtn.title = "Speak your action";
+      statusEl.textContent = "";
+    };
+    recognition.onend   = stopListening;
+    recognition.onerror = (e) => {
+      if (e.error !== "no-speech") statusEl.textContent = `⚠ Mic: ${e.error}`;
+      stopListening();
+    };
+
+    micBtn.addEventListener("click", () => {
+      if (listening) recognition.stop();
+      else           recognition.start();
+    });
+  }
+
   sendRow.appendChild(sendBtn);
   generalActionsCol.appendChild(sendRow);
 
