@@ -274,6 +274,30 @@ When a monster is deleted from the `monsters` collection but its token is still 
 **5. `getDocFromServer` as live-update safety net**
 Firestore's WebSocket can go stale (brief disconnect, mobile background, tab sleep). When this happens `onSnapshot` stops delivering updates; after a refresh the latest data appears because `getDoc` hits the server directly. Fix: on Campaign tab click, fire `getDocFromServer(doc(db, "scenes", locId))` in the background. If the fetched data differs from `sceneData`, update and re-render. This is additive — it does NOT replace the `onSnapshot` listener.
 
+### Session 13 — Monster instances
+
+**Feature:** Create multiple instances of a single monster type; each instance is tracked independently in the encounter sidebar.
+
+#### How it works
+- Root monster: created as before via the add-monster form. No `parentId` field.
+- Instance: clicking the `＋` button on a root card calls `addDoc(monsters, { name, hp: hpMax, hpMax, type, sizeX, sizeY, parentId: root.id, createdAt })`.
+- `renderEncounterList()` builds a `byParent` map (`parentId → [instance docs]`), then renders roots with their instances indented below.
+- Instances are labelled `"[Name] #1"`, `"#2"`, etc.
+- Instances can each be dragged onto the scene map independently.
+- Deleting a root also deletes all its instances (cascade via `byParent[root.id]`).
+- Pinning (focus-to-top) works on both root and any instance.
+
+#### Key implementation detail — `byParent` scope
+`byParent` must be a **module-level `let`** (not `const` inside `renderEncounterList`), because `makeMonsterCard`'s delete handler is a closure that fires later when the user clicks. If `byParent` were local, the delete handler would throw `ReferenceError`. Fix: declared `let byParent = {}` at module scope; `renderEncounterList` assigns `byParent = {}` (no `const`) each render.
+
+#### Files changed
+| File | Change |
+|------|--------|
+| `js/dm.js` | `byParent` promoted to module level; `renderEncounterList` replaced with hierarchical version; `makeMonsterCard(m, isInstance, countOrNum)` helper added |
+| `css/dm.css` | Added `.dm-enc-card--instance`, `.dm-enc-add-inst`, `.dm-enc-inst-count` |
+
+---
+
 ### Session 7 — General Actions narrate interface
 - **`js/sheet.js`:** Replaced direct-log general action buttons with a narrate workflow:
   - Textarea at top of General Actions column for free-form input (English/Hungarian/mixed)
