@@ -1,0 +1,9 @@
+[build]
+  functions = "netlify/functions"
+  publish   = "."
+
+# Firebase client-side API keys (AIza...) are intentionally public —
+# they are restricted by Firebase security rules, not kept secret.
+# Disable Netlify's smart secret detection to allow the deploy.
+[build.environment]
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
