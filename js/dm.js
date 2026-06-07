@@ -1,8 +1,9 @@
 import { db } from "./firebase-config.js";
 import {
-  collection, onSnapshot, orderBy, query,
-  doc, updateDoc, addDoc, deleteDoc, setDoc, serverTimestamp, deleteField,
+  collection, onSnapshot, orderBy, query, limit,
+  doc, getDoc, updateDoc, addDoc, deleteDoc, setDoc, serverTimestamp, deleteField, getDocs,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { registerPush } from "./push-utils.js";
 
 const DM_PASSWORD = "1234";
 
@@ -10,13 +11,48 @@ const ALL_STATS = [
   "Might", "Agility", "Endurance",
   "Knowledge", "Perception", "Ingenuity",
   "Presence", "Will", "Empathy",
-  "Resonance",
 ];
 
 const CONDITIONS = [
   "Poisoned", "Blinded", "Stunned", "Prone", "Frightened",
   "Charmed", "Paralyzed", "Exhausted", "Burning", "Bleeding",
 ];
+
+const ABILITY_DB = {
+  // ── NASHT (Body) ──────────────────────────────────────────
+  "Sure Step":               { tier: 1, bloodline: "Nasht",  description: "You never lose your footing on uneven ground for a scene. Climb a cliff face, run across rooftops, dance across stepping stones in a flood — your body knows where to be." },
+  "Quick Hands":             { tier: 1, bloodline: "Nasht",  description: "React first in a sudden moment. Catch a falling object, draw a blade before an attacker can finish their swing, snatch the dagger from someone's belt. You move before others can think." },
+  "Long Wind":               { tier: 1, bloodline: "Nasht",  description: "Run, climb, or swim past where you should have stopped. Useful for chases, escapes, long pursuits. Your body simply does not tire when you call this." },
+  "Press On":                { tier: 2, bloodline: "Nasht",  description: "Ignore one wound's penalty for a scene. The injury is real and bleeding, but it does not slow you. The cost comes later — the wound is worse when the scene ends." },
+  "Hunter's Sense":          { tier: 2, bloodline: "Nasht",  description: "Find a trail, scent, or path that others have lost. Read tracks, smell what passed through a room hours ago, sense which way the prey ran. The world tells you where things have been." },
+  "Strike True":             { tier: 2, bloodline: "Nasht",  description: "Your next blow lands cleanly. No roll needed — it hits exactly where you intended, with full force. Save this for the moment that matters." },
+  "Beast's Speed":           { tier: 3, bloodline: "Nasht",  description: "For one scene, move twice as fast as anyone watching. You blur. You arrive at the other side of the room before the door has finished closing. You become hard to hit and harder to track." },
+  "Iron Skin":               { tier: 3, bloodline: "Nasht",  description: "A blow that would have killed you only wounds. Activated reactively — when struck by a fatal hit, you survive it, badly hurt but alive." },
+  "Killing Rhythm":          { tier: 3, bloodline: "Nasht",  description: "Once you draw first blood in a scene your body finds its groove — each strike flows from the last, faster and surer. The rhythm holds until you stop moving or take a hit." },
+  "Wear the Hunt":           { tier: 4, bloodline: "Nasht",  description: "For one scene, you become more than human. Leap rooftop to rooftop, shrug off spear-thrusts, run down a horse at full gallop, strike with the weight of a falling tree. When the scene ends you collapse — no further Shaper abilities that day." },
+  // ── AREMU (Mind) ──────────────────────────────────────────
+  "True Recall":             { tier: 1, bloodline: "Aremu",  description: "Remember a detail you saw but didn't consciously notice. The pattern on the assassin's blade. The name on the parchment glimpsed in passing. The exact words a stranger said three days ago. Your mind held it; now it gives it back." },
+  "Steady Heart":            { tier: 1, bloodline: "Aremu",  description: "Resist one moment of fear, charm, or panic. The fear is still real — you simply choose, for this moment, that it does not move you." },
+  "Read the Fight":          { tier: 1, bloodline: "Aremu",  description: "Study one opponent for a breath. You understand them — how they move, where they flinch, what they guard. The DM tells you one truth about how they fight." },
+  "Predict the Strike":      { tier: 2, bloodline: "Aremu",  description: "Before an opponent acts, declare what you think they will do. If you read them right the response comes without effort — dodge, block, or counter lands cleanly." },
+  "Hold the Name":           { tier: 2, bloodline: "Aremu",  description: "Hear someone speak their true name. You now hold it. While you hold it, you have an edge against them — in social conflict, resisting their magic, finding them across distance. They feel you holding it but cannot remove it." },
+  "Cold Calculation":        { tier: 2, bloodline: "Aremu",  description: "Take a moment of stillness in the middle of chaos. Everything becomes clear — positions, intentions, what happens next if nobody changes course. Act on it." },
+  "Overload":                { tier: 3, bloodline: "Aremu",  description: "Flood a target's mind with the weight of every choice that led them here. For a moment they can only experience it — they cannot act." },
+  "Unravel":                 { tier: 3, bloodline: "Aremu",  description: "Find the thread of something in a target's mind and pull. For this scene they lose access to it — a fighting style, a language, a trained skill. They feel it go." },
+  "Bind the Mind":           { tier: 3, bloodline: "Aremu",  description: "For a few sentences, the person you are speaking to cannot lie to you. They may refuse, deflect, or speak in riddles — but no false statement can pass their lips. They know you are doing this and resent it." },
+  "The Perfect Move":        { tier: 4, bloodline: "Aremu",  description: "One breath of absolute clarity. You see every person in the scene, every intention, every likely outcome. The single action that changes everything becomes obvious. Take it." },
+  // ── ANUBET (Spirit) ───────────────────────────────────────
+  "Numb":                    { tier: 1, bloodline: "Anubet", description: "Touch yourself or another. Dull the pain of one wound — it still bleeds but it does not slow you down for this scene." },
+  "Hush":                    { tier: 1, bloodline: "Anubet", description: "Make a small sound never have been heard. The footstep on the gravel. The breath you just exhaled. The creaking shutter. The sound is unmade — anyone who could have heard it now did not." },
+  "Quiet Wound":             { tier: 1, bloodline: "Anubet", description: "Close a small cut. Soothe a small pain. A scrape, a shallow knife-wound, a burn the size of a coin. The wound knits in moments. Larger wounds need higher-tier abilities or simple medicine." },
+  "Still the Heart":         { tier: 2, bloodline: "Anubet", description: "Slow your own pulse to nothing for up to a minute. You appear dead — cold to the touch, not breathing. Useful for hiding from things that hunt the living, or escaping pursuers who will check the body." },
+  "Walk Unseen":             { tier: 2, bloodline: "Anubet", description: "For one scene, eyes slide off you if you don't draw attention. You can stand in a crowded room and be unnoticed. You can pass a guard who is looking right at you. Speaking, fighting, or doing anything sudden breaks the effect." },
+  "Speak with the Just-Dead":{ tier: 2, bloodline: "Anubet", description: "Ask one question of a person who died less than a day ago. They will answer truthfully — but as they were in life, with all their biases. They may not know what killed them. They may not know they are dead." },
+  "Unmake a Moment":         { tier: 3, bloodline: "Anubet", description: "Undo one small thing you just did. Five seconds of time, witnesses included. The dropped cup is back in your hand. The sentence never spoken. The arrow returned to your quiver. Only those touched by the strange feel a faint chill." },
+  "Touch of Sleep":          { tier: 3, bloodline: "Anubet", description: "A creature you touch falls into deep sleep for an hour. They cannot be woken by normal means. Useful in combat, infiltration, mercy, or interrogation. Larger creatures may resist." },
+  "Drain Presence":          { tier: 3, bloodline: "Anubet", description: "Reach into a target's spirit and pull out their will to be noticed. For a scene, anything that hunts by sense — the strange, predators, searching minds — simply passes over them." },
+  "The Door That Closes":    { tier: 4, bloodline: "Anubet", description: "Choose: Kill one living thing within sight with a word — their heart simply stops, no resistance. Or Keep one dying thing alive for a day, wounds stable, to be healed or make peace. After either, no further Shaper abilities that day." },
+};
 
 const EMOJI_CATEGORIES = [
   { label: "Weapons",    emojis: ["⚔️","🗡️","🏹","🔱","🪃","🛡️","⚒️","🔨","🪓","🪖","🗺️","🧨"] },
@@ -114,12 +150,58 @@ let selectedSceneLocId = null;
 let movingToken        = null;   // { locId, sceneKey, token } — token selected for click-to-move
 let pinnedMonsterId    = null;   // monsterId pinned to top of encounter list
 let spectatorLocId     = null;   // locationId shown on spectator screen
+let dmLogEntries       = {};     // entryId → { el, data } for scenes-tab log
+// ── Tooltip (escapes scroll containers via fixed positioning) ──
+(function initTooltip() {
+  const tip = document.createElement("div");
+  tip.id = "dm-ability-tooltip";
+  tip.style.cssText = "position:fixed;z-index:9999;display:none;max-width:290px;padding:0.5rem 0.7rem;background:#1a1008;border:1px solid #5a3a1a;color:#d4c4a0;font-family:Georgia,serif;font-size:0.78rem;line-height:1.5;border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,0.75);pointer-events:none;white-space:normal";
+  document.body.appendChild(tip);
+
+  document.addEventListener("mouseover", e => {
+    const el = e.target.closest("[data-tooltip]");
+    if (!el) { tip.style.display = "none"; return; }
+    tip.textContent = el.dataset.tooltip;
+    tip.style.display = "block";
+  });
+  document.addEventListener("mousemove", e => {
+    if (tip.style.display === "none") return;
+    const x = e.clientX + 14, y = e.clientY + 14;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = (x + tw > window.innerWidth  ? x - tw - 28 : x) + "px";
+    tip.style.top  = (y + th > window.innerHeight ? y - th - 28 : y) + "px";
+  });
+  document.addEventListener("mouseout", e => {
+    if (!e.target.closest("[data-tooltip]")) tip.style.display = "none";
+  });
+})();
+
 let dmUnlocked        = false;
 let unsubCharacters   = null;
 let unsubLocations    = null;
 let unsubTurn         = null;
 let unsubMonsters     = null;
 let unsubScenes       = null;
+let unsubSettings     = null;
+
+// ── Game settings (live from Firestore settings/game) ─────
+// Defaults are used until the doc loads or if a field is absent
+let gameSettings = {
+  tierThresholds:  { 1: 10, 2: 13, 3: 16, 4: 19 },
+  tierCooldowns:   { 1: 3,  2: 5,  3: 7,  4: 9  },
+  hpBase:          5,
+  hpEnduranceMult: 3,
+  hpMightMult:     1,
+  callBudgetMult:  1,   // Aremu sum × this = calls per turn
+  recoveryDivisor: 3,   // ceil(Anubet sum / this) = HP recovered on turn end
+};
+function gsThreshold(tier)    { return gameSettings.tierThresholds?.[tier]  ?? [null,10,13,16,19][tier]; }
+function gsCooldown(tier)     { return gameSettings.tierCooldowns?.[tier]   ?? [null,3,5,7,9][tier]; }
+function gsHpBase()           { return gameSettings.hpBase          ?? 5; }
+function gsHpEndMult()        { return gameSettings.hpEnduranceMult ?? 3; }
+function gsHpMightMult()      { return gameSettings.hpMightMult     ?? 1; }
+function gsCallMult()         { return gameSettings.callBudgetMult  ?? 1; }
+function gsRecoveryDiv()      { return gameSettings.recoveryDivisor ?? 3; }
 
 // ── DOM refs ──────────────────────────────────────────────
 const dmBtn            = document.getElementById("dmBtn");
@@ -153,6 +235,7 @@ function checkPassword() {
     dmUnlocked = true;
     closePasswordModal();
     openPanel();
+    initDmNotifButton();
   } else {
     dmPasswordError.classList.remove("hidden");
     dmPasswordInput.select();
@@ -174,52 +257,212 @@ dmCloseBtn.addEventListener("click", () => {
   document.body.style.overflow = "";
 });
 
-// ── Claude AI helpers ────────────────────────────────────
-function getClaudeApiKey() {
-  return localStorage.getItem("ebClaudeApiKey") || "";
-}
-function setClaudeApiKey(key) {
-  if (key) localStorage.setItem("ebClaudeApiKey", key.trim());
-  else localStorage.removeItem("ebClaudeApiKey");
-}
+// ── Claude AI helpers — routed through Netlify serverless proxy ───────────────
+// The API key lives in ANTHROPIC_API_KEY env var on Netlify; never in the browser.
 
-async function callClaude(text, phase) {
-  const apiKey = getClaudeApiKey();
-  if (!apiKey) throw new Error("No API key configured");
-  const phaseContext = {
-    combat:      "an intense combat encounter",
-    exploration: "an exploration or discovery moment",
-    roleplay:    "a roleplay or social interaction",
-    downtime:    "a downtime or rest period",
-  }[phase] || "a scene";
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 500,
-      messages: [{
-        role: "user",
-        content: `You are a narrative assistant for "Echoes Beneath," a dark fantasy tabletop RPG. The Dungeon Master wrote this description for ${phaseContext}:\n\n"${text}"\n\nThe input may be in English or Hungarian. Enhance it: fix typos, add atmospheric dark fantasy flair, improve clarity. Then provide both language versions.\n\nRespond in exactly this format (no extra commentary):\n🇬🇧 [enhanced English version, 1-3 sentences]\n🇭🇺 [enhanced Hungarian version, 1-3 sentences]`,
-      }],
-    }),
+async function claudeProxy(messages, max_tokens = 500) {
+  const response = await fetch("/.netlify/functions/claude", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens, messages }),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || `API error ${response.status}`);
   return data.content[0].text.trim();
 }
 
+/** Strip markdown fences then parse the outermost JSON object from a Claude response. */
+function extractJson(raw) {
+  const cleaned = raw.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+  const start = cleaned.indexOf("{");
+  const end   = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1) throw new Error("No JSON found: " + cleaned.slice(0, 80));
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+/**
+ * DM always types in English.
+ * messageEN = original text (no Claude needed).
+ * messageHU = Hungarian translation from Claude (plain text, no JSON).
+ * Returns { messageEN, messageHU } or { messageEN } on failure.
+ */
+async function translateMessage(message) {
+  const messageEN = message;
+  try {
+    const prompt =
+      `Translate the following dark fantasy tabletop RPG log message into Hungarian. ` +
+      `Keep character names, location names, numbers, and game terms (HP, round, etc.) unchanged.\n\n` +
+      `${message}\n\n` +
+      `Reply with ONLY the Hungarian translation, nothing else:`;
+    const raw = await claudeProxy([{ role: "user", content: prompt }], 300);
+    const messageHU = raw.trim();
+    if (!messageHU) throw new Error("Empty translation");
+    return { messageEN, messageHU };
+  } catch (e) {
+    console.error("DM translation failed:", e);
+    return { messageEN };
+  }
+}
+
+/**
+ * For automated entries (heal ticks, encounter damage) — patch translations
+ * onto an already-written Firestore doc.
+ */
+async function translateAndUpdate(docRef, message) {
+  const t = await translateMessage(message);
+  try { await updateDoc(docRef, t); } catch (e) { console.error("translateAndUpdate patch failed:", e); }
+}
+
+// ── Push notifications ────────────────────────────────────
+
+let dmPushSub = null;   // DM's own push subscription (set when DM opts in)
+
+async function initDmNotifButton() {
+  const btn = document.getElementById("dmNotifBtn");
+  if (!btn) return;
+
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    btn.style.display = "none";
+    return;
+  }
+
+  const updateBtn = (state) => {
+    if (state === "granted") {
+      btn.textContent = "🔔 Notifications On";
+      btn.title = "Push notifications enabled";
+      btn.classList.add("dm-notif-btn--on");
+      btn.disabled = true;
+    } else if (state === "denied") {
+      btn.textContent = "🔕 Blocked";
+      btn.title = "Notifications blocked — enable in browser settings";
+      btn.disabled = true;
+    } else {
+      btn.textContent = "🔔 Enable Notifications";
+      btn.title = "Enable push notifications for player actions";
+      btn.classList.remove("dm-notif-btn--on");
+      btn.disabled = false;
+    }
+  };
+
+  if (Notification.permission === "denied") {
+    updateBtn("denied");
+    return;
+  }
+
+  // Primary: ask the service worker if there's already an active push subscription
+  // on this device. This is the reliable source of truth — Firestore is just storage.
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing && Notification.permission === "granted") {
+      dmPushSub = existing.toJSON();
+      // Refresh Firestore with the current subscription so notifyDM works from any device
+      setDoc(doc(db, "config", "dm"), { pushSubscription: dmPushSub }, { merge: true }).catch(() => {});
+      updateBtn("granted");
+      return;
+    }
+  } catch (_) {}
+
+  // Fallback: check Firestore (e.g. service worker not yet ready on first load)
+  try {
+    const snap = await getDoc(doc(db, "config", "dm"));
+    if (snap.exists() && snap.data().pushSubscription) {
+      dmPushSub = snap.data().pushSubscription;
+      updateBtn("granted");
+    }
+  } catch (_) {}
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    const sub = await registerPush();
+    if (sub) {
+      dmPushSub = sub;
+      await setDoc(doc(db, "config", "dm"), { pushSubscription: sub }, { merge: true });
+      updateBtn("granted");
+    } else {
+      updateBtn(Notification.permission);
+    }
+  });
+}
+
+/**
+ * Send Web Push to a list of subscriptions via the Netlify function.
+ * Fire-and-forget — errors are logged but never surface to the UI.
+ */
+async function sendPush(subscriptions, title, body, url = "/", tag = "eb") {
+  const subs = subscriptions.filter(Boolean);
+  if (!subs.length) return;
+  try {
+    await fetch("/.netlify/functions/send-push", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ subscriptions: subs, title, body, url, tag }),
+    });
+  } catch (err) {
+    console.warn("Push send failed:", err);
+  }
+}
+
+/** Notify all players at a given locationId. */
+function notifyPlayers(locationId, title, body) {
+  if (!locationId) return;
+  const subs = Object.values(characters)
+    .filter(c => c.locationId === locationId && c.pushSubscription)
+    .map(c => c.pushSubscription);
+  if (!subs.length) return;
+  const locName = locationLabel(locationId) || "your location";
+  sendPush(subs, title, body, "/", `turn-${locationId}`);
+}
+
+/** Notify the DM (uses the in-memory subscription acquired on unlock). */
+function notifyDM(title, body) {
+  if (!dmPushSub) return;
+  sendPush([dmPushSub], title, body, "/", "dm-scene");
+}
+
+// Enhance a "speak as" message in the voice of a specific character/monster
+async function callClaudeSpeakAs(text, actorName, actorMeta, type) {
+  const typeContext = {
+    roleplay: "a roleplay or social interaction",
+    combat:   "an intense combat encounter",
+    system:   "a dramatic narration moment",
+  }[type] || "a scene";
+  const metaStr = actorMeta ? ` (${actorMeta})` : "";
+  const prompt =
+    `You are a narrative assistant for "Echoes Beneath," a dark fantasy TTRPG.\n` +
+    `The character ${actorName}${metaStr} is speaking during ${typeContext}.\n\n` +
+    `The Dungeon Master wrote this draft in their voice:\n"${text}"\n\n` +
+    `The input may be in any language — translate to English if needed.\n` +
+    `Rewrite it as vivid, in-character speech — dark fantasy tone, 1-3 sentences, ` +
+    `keeping the original intent and emotion. Fix any typos.\n\n` +
+    `Respond with the English version only. No labels, no extra commentary.`;
+  return claudeProxy([{ role: "user", content: prompt }], 400);
+}
+
+async function callClaude(text, phase) {
+  const phaseContext = {
+    combat:      "an intense combat encounter",
+    exploration: "an exploration or discovery moment",
+    roleplay:    "a roleplay or social interaction",
+    downtime:    "a downtime or rest period",
+  }[phase] || "a scene";
+  const content =
+    `You are a narrative assistant for "Echoes Beneath," a dark fantasy tabletop RPG. ` +
+    `The Dungeon Master wrote this description for ${phaseContext}:\n\n"${text}"\n\n` +
+    `The input may be in any language — translate to English if needed. ` +
+    `Enhance it: fix typos, add atmospheric dark fantasy flair, improve clarity. Keep it 1-3 sentences.\n\n` +
+    `Respond with the enhanced English text only. No labels, no extra commentary.`;
+  return claudeProxy([{ role: "user", content }], 500);
+}
+
 function attachAiEnhance(strip, textareaId, phaseSelId, staticPhase) {
   const enhanceBtn = strip.querySelector("#dmBtnEnhance");
-  const keyBtn     = strip.querySelector("#dmBtnConfigKey");
   const statusEl   = strip.querySelector("#dmAiStatus");
   const textarea   = strip.querySelector("#" + textareaId);
   if (!enhanceBtn || !textarea) return;
+
+  // Remove key-config button if present (no longer needed — key lives on server)
+  strip.querySelector("#dmBtnConfigKey")?.remove();
 
   let originalText = null;
 
@@ -231,13 +474,6 @@ function attachAiEnhance(strip, textareaId, phaseSelId, staticPhase) {
   enhanceBtn.addEventListener("click", async () => {
     const text = textarea.value.trim();
     if (!text) { textarea.focus(); return; }
-
-    let apiKey = getClaudeApiKey();
-    if (!apiKey) {
-      apiKey = prompt("Enter your Anthropic API key (stored locally in this browser only):");
-      if (!apiKey) return;
-      setClaudeApiKey(apiKey);
-    }
 
     const phase = phaseSelId
       ? (strip.querySelector("#" + phaseSelId)?.value || "combat")
@@ -267,14 +503,6 @@ function attachAiEnhance(strip, textareaId, phaseSelId, staticPhase) {
     }
   });
 
-  keyBtn.addEventListener("click", () => {
-    const current = getClaudeApiKey();
-    const key = prompt("Anthropic API key (leave blank to clear):", current ? "sk-ant-…(hidden)" : "");
-    if (key === null) return;
-    setClaudeApiKey(key);
-    setStatus(key ? "🔑 Key saved" : "🔑 Key cleared");
-    setTimeout(() => setStatus(""), 2000);
-  });
 }
 
 // ── Turn strip ────────────────────────────────────────────
@@ -334,7 +562,6 @@ function renderTurnStrip() {
         <div class="dm-ai-row">
           <button class="dm-btn dm-btn-neutral dm-btn-sm" id="dmBtnEnhance">✨ Enhance</button>
           <span class="dm-ai-status" id="dmAiStatus"></span>
-          <button class="dm-btn-link dm-ai-key-btn" id="dmBtnConfigKey" title="Configure AI API key">🔑</button>
         </div>
         <div class="dm-turn-form-btns">
           <button class="dm-btn dm-btn-heal" id="dmBtnBeginTurn">▶ Begin</button>
@@ -367,12 +594,16 @@ function renderTurnStrip() {
         active: true, round: 1, phase, description: desc,
         locationId: turnDocId, startedAt: serverTimestamp(),
       });
+      const msg1 = `${PHASE_ICONS[phase]} [${locName}] Round 1 begins — ${desc}`;
+      const t1   = await translateMessage(msg1);
       await addDoc(collection(db, "sessionLog"), {
         type: "turn", actor: "DM",
-        message: `${PHASE_ICONS[phase]} [${locName}] Round 1 begins — ${desc}`,
+        message: msg1, ...t1,
         timestamp: serverTimestamp(), charId: null,
         locationId: turnDocId !== "__global__" ? turnDocId : null,
       });
+      notifyPlayers(turnDocId !== "__global__" ? turnDocId : null, `${PHASE_ICONS[phase]} Round 1 begins`, desc);
+      resetAllCalls(); // New turn — restore everyone's call budget
     });
 
   } else {
@@ -401,7 +632,6 @@ function renderTurnStrip() {
         <div class="dm-ai-row">
           <button class="dm-btn dm-btn-neutral dm-btn-sm" id="dmBtnEnhance">✨ Enhance</button>
           <span class="dm-ai-status" id="dmAiStatus"></span>
-          <button class="dm-btn-link dm-ai-key-btn" id="dmBtnConfigKey" title="Configure AI API key">🔑</button>
         </div>
         <div class="dm-turn-form-btns">
           <button class="dm-btn dm-btn-heal" id="dmBtnConfirmNext">▶ Round ${round + 1}</button>
@@ -432,12 +662,17 @@ function renderTurnStrip() {
         active: true, round: newRound, phase, description: newDesc,
         locationId: turnDocId, startedAt: serverTimestamp(),
       });
+      const msgNext = `${icon} [${locName}] Round ${newRound} — ${newDesc}`;
+      const tNext   = await translateMessage(msgNext);
       await addDoc(collection(db, "sessionLog"), {
         type: "turn", actor: "DM",
-        message: `${icon} [${locName}] Round ${newRound} — ${newDesc}`,
+        message: msgNext, ...tNext,
         timestamp: serverTimestamp(), charId: null,
         locationId: turnDocId !== "__global__" ? turnDocId : null,
       });
+      notifyPlayers(turnDocId !== "__global__" ? turnDocId : null, `${icon} Round ${newRound}`, newDesc);
+      // Auto-decrement ability cooldowns for all characters
+      tickAllCooldowns();
     });
     strip.querySelector("#dmBtnEditDesc").addEventListener("click", () => {
       const bar = strip.querySelector("#dmTurnDescBar");
@@ -464,12 +699,15 @@ function renderTurnStrip() {
         active: false, round: 0, phase: "exploration", description: "",
         locationId: turnDocId, endedAt: serverTimestamp(),
       });
+      const msgEnd = `✕ [${locName}] Turn ended after Round ${round}`;
+      const tEnd   = await translateMessage(msgEnd);
       await addDoc(collection(db, "sessionLog"), {
         type: "turn", actor: "DM",
-        message: `✕ [${locName}] Turn ended after Round ${round}`,
+        message: msgEnd, ...tEnd,
         timestamp: serverTimestamp(), charId: null,
         locationId: turnDocId !== "__global__" ? turnDocId : null,
       });
+      applySceneRecovery(turnDocId); // Spirit recovery for chars at this location
     });
   }
 }
@@ -543,6 +781,19 @@ function startListening() {
     });
   });
 
+  // Session log listener (for scenes-tab sidebar)
+  onSnapshot(
+    query(collection(db, "sessionLog"), orderBy("timestamp", "desc"), limit(80)),
+    snap => {
+      snap.docChanges().forEach(change => {
+        const id = change.doc.id;
+        if (change.type === "removed") delete dmLogEntries[id];
+        else dmLogEntries[id] = { data: change.doc.data() };
+      });
+      rerenderDmLog();
+    }
+  );
+
   // Scenes listener
   if (!unsubScenes) {
     unsubScenes = onSnapshot(collection(db, "scenes"), snap => {
@@ -558,6 +809,23 @@ function startListening() {
       }
     }, () => {});
   }
+
+  if (!unsubSettings) {
+    unsubSettings = onSnapshot(doc(db, "settings", "game"), snap => {
+      if (snap.exists()) {
+        const d = snap.data();
+        if (d.tierThresholds)        gameSettings.tierThresholds  = d.tierThresholds;
+        if (d.tierCooldowns)         gameSettings.tierCooldowns   = d.tierCooldowns;
+        if (d.hpBase          != null) gameSettings.hpBase          = d.hpBase;
+        if (d.hpEnduranceMult != null) gameSettings.hpEnduranceMult = d.hpEnduranceMult;
+        if (d.hpMightMult     != null) gameSettings.hpMightMult     = d.hpMightMult;
+        if (d.callBudgetMult  != null) gameSettings.callBudgetMult  = d.callBudgetMult;
+        if (d.recoveryDivisor != null) gameSettings.recoveryDivisor = d.recoveryDivisor;
+      }
+      if (activeTab() === "settings") renderSettingsTab();
+      if (activeTab() === "spells" && selectedCharId) renderSpellsTab(characters[selectedCharId]);
+    }, () => {});
+  }
 }
 
 // ── Character sidebar ─────────────────────────────────────
@@ -569,26 +837,48 @@ function renderCharList() {
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   chars.forEach(char => {
-      const btn = document.createElement("button");
-      btn.className = "dm-char-btn" + (char.id === selectedCharId ? " active" : "");
-      const pct = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
-      const hpClass = pct <= 30 ? "low" : pct <= 60 ? "mid" : "";
-      btn.innerHTML = `
-        <span class="dm-char-name">${char.name || char.id}</span>
-        <span class="dm-char-hp ${hpClass}">${char.hp ?? "?"}/${char.hpMax ?? "?"} HP</span>
-      `;
-      btn.addEventListener("click", () => {
-        selectedCharId = char.id;
-        renderCharList();
-        renderActiveTab();
-      });
-      btn.draggable = true;
-      btn.addEventListener("dragstart", e => {
-        e.dataTransfer.setData("charId", char.id);
-        e.dataTransfer.effectAllowed = "copy";
-      });
-      dmCharList.appendChild(btn);
+    const wrap = document.createElement("div");
+    wrap.className = "dm-char-wrap";
+
+    const btn = document.createElement("button");
+    btn.className = "dm-char-btn" + (char.id === selectedCharId ? " active" : "");
+    const pct = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
+    const hpClass = pct <= 30 ? "low" : pct <= 60 ? "mid" : "";
+    btn.innerHTML = `
+      <span class="dm-char-name">${char.name || char.id}</span>
+      <span class="dm-char-hp ${hpClass}">${char.hp ?? "?"}/${char.hpMax ?? "?"} HP</span>
+    `;
+    btn.addEventListener("click", () => {
+      selectedCharId = char.id;
+      renderCharList();
+      renderActiveTab();
     });
+    btn.draggable = true;
+    btn.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("charId", char.id);
+      e.dataTransfer.effectAllowed = "copy";
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "dm-char-delete";
+    delBtn.title     = "Delete character";
+    delBtn.textContent = "🗑";
+    delBtn.addEventListener("click", async e => {
+      e.stopPropagation();
+      if (!confirm(`Permanently delete "${char.name}"?\nThis cannot be undone.`)) return;
+      if (selectedCharId === char.id) {
+        selectedCharId = null;
+        document.querySelectorAll(".dm-tab-panel").forEach(p => {
+          p.innerHTML = `<div class="dm-no-char">Select a character from the list.</div>`;
+        });
+      }
+      await deleteDoc(doc(db, "characters", char.id));
+    });
+
+    wrap.appendChild(btn);
+    wrap.appendChild(delBtn);
+    dmCharList.appendChild(wrap);
+  });
 }
 
 // ── Tab switching ─────────────────────────────────────────
@@ -611,10 +901,11 @@ function renderActiveTab() {
   const tab  = activeTab();
   if (tab === "locations") { renderLocationsTab(); return; }
   if (tab === "scenes")    { renderScenesTab();    return; }
+  if (tab === "settings")  { renderSettingsTab();  return; }
 
   const char = selectedCharId ? characters[selectedCharId] : null;
   if (!char) {
-    ["combat", "inventory", "stats", "log"].forEach(t => {
+    ["combat", "inventory", "stats", "log", "spells"].forEach(t => {
       const el = document.getElementById("dm-tab-" + t);
       if (el) el.innerHTML = `<div class="dm-no-char">Select a character from the list.</div>`;
     });
@@ -642,25 +933,114 @@ function hpColor(pct) {
 function charRef() {
   return doc(db, "characters", selectedCharId);
 }
-async function dmLog(type, actor, message) {
-  await addDoc(collection(db, "sessionLog"), {
-    type, actor, message,
+
+// Finds which scene location a monster token is placed in.
+// Falls back to selectedTurnLocId if the monster isn't on any map.
+function findMonsterLocId(monsterId) {
+  for (const [locId, scene] of Object.entries(scenes)) {
+    const tokens = scene.current?.tokens || [];
+    if (tokens.some(t => t.monsterId === monsterId)) return locId;
+  }
+  return selectedTurnLocId !== "__global__" ? selectedTurnLocId : null;
+}
+
+// Returns a narrative health state phrase based on HP percentage
+function playerCombatState(hp, hpMax) {
+  if (!hpMax) return null;
+  const pct = hp / hpMax;
+  if (hp <= 0)     return "has fallen unconscious";
+  if (pct <= 0.10) return "is on the brink of death";
+  if (pct <= 0.25) return "is in dire condition";
+  if (pct <= 0.50) return "is badly wounded";
+  if (pct <= 0.75) return "is wounded";
+  return "is lightly wounded";
+}
+
+// HP formula: hpBase + (Endurance × hpEndMult) + (Might × hpMightMult)
+function calcHpMax(stats) {
+  return gsHpBase() + ((stats.Endurance || 0) * gsHpEndMult()) + ((stats.Might || 0) * gsHpMightMult());
+}
+
+// Aremu sum × callBudgetMult = call budget per turn
+function calcCallBudget(stats) {
+  const aremu = (stats.Knowledge || 0) + (stats.Perception || 0) + (stats.Ingenuity || 0);
+  return Math.max(1, Math.round(aremu * gsCallMult()));
+}
+
+// Anubet scene recovery = ceil(Anubet sum / recoveryDivisor)
+function calcRecovery(stats) {
+  const sum = (stats.Presence || 0) + (stats.Will || 0) + (stats.Empathy || 0);
+  return Math.ceil(sum / gsRecoveryDiv());
+}
+
+// Reset callsUsed to 0 for all characters (called on New Turn / Begin)
+async function resetAllCalls() {
+  const updates = Object.entries(characters).map(([id]) =>
+    updateDoc(doc(db, "characters", id), { callsUsed: 0 })
+  );
+  if (updates.length) await Promise.all(updates);
+}
+
+// Apply Anubet scene recovery HP to all characters (called on End Turn)
+async function applySceneRecovery(locationId) {
+  const updates = [];
+  Object.entries(characters).forEach(([id, char]) => {
+    // Only heal chars at this location (or all if global turn)
+    if (locationId && locationId !== "__global__" && char.locationId !== locationId) return;
+    const recovery = calcRecovery(char.stats || {});
+    if (!recovery) return;
+    const newHp = Math.min(char.hpMax || 0, (char.hp || 0) + recovery);
+    if (newHp === char.hp) return;
+    const recMsg = `✨ ${char.name} recovers ${recovery} HP (Spirit ${calcRecovery(char.stats||{})})`;
+    updates.push(
+      updateDoc(doc(db, "characters", id), { hp: newHp }),
+      addDoc(collection(db, "sessionLog"), {
+        type: "heal", actor: "Turn End",
+        message: recMsg,
+        charId: id, timestamp: serverTimestamp(),
+      }).then(ref => translateAndUpdate(ref, recMsg))
+    );
+  });
+  if (updates.length) await Promise.all(updates);
+}
+
+// Decrement every active ability cooldown by 1 for all characters (called on Next Round)
+async function tickAllCooldowns() {
+  const updates = [];
+  Object.entries(characters).forEach(([id, char]) => {
+    const cd = char.abilityCooldowns;
+    if (!cd || !Object.keys(cd).length) return;
+    const patch = {};
+    Object.entries(cd).forEach(([name, turns]) => {
+      if (turns <= 1) patch[`abilityCooldowns.${name}`] = deleteField();
+      else            patch[`abilityCooldowns.${name}`] = turns - 1;
+    });
+    updates.push(updateDoc(doc(db, "characters", id), patch));
+  });
+  if (updates.length) await Promise.all(updates);
+}
+
+async function dmLog(type, actor, message, locationId = null) {
+  const t = await translateMessage(message);
+  const entry = {
+    type, actor, message, ...t,
     timestamp: serverTimestamp(),
     charId: selectedCharId || null,
-  });
+  };
+  if (locationId) entry.locationId = locationId;
+  await addDoc(collection(db, "sessionLog"), entry);
 }
+
 
 // ── COMBAT TAB ────────────────────────────────────────────
 function renderCombatTab(char) {
   const el = document.getElementById("dm-tab-combat");
   const conds = char.conditions || {};
   const pct = hpPct(char);
-  const ds = char.deathSaves || { successes: 0, failures: 0 };
-
   el.innerHTML = `
     <div class="dm-combat-grid">
 
-      <!-- Left column: HP + Death Saves -->
+      <!-- Left column: HP -->
       <div class="dm-combat-col">
         <div class="dm-section">
           <h3 class="dm-section-title">Hit Points</h3>
@@ -679,27 +1059,6 @@ function renderCombatTab(char) {
             <button class="dm-btn dm-btn-heal"   id="dmBtnHeal">Heal</button>
             <button class="dm-btn dm-btn-neutral" id="dmBtnSetHP">Set HP</button>
             <button class="dm-btn dm-btn-neutral" id="dmBtnSetMax">Set Max HP</button>
-          </div>
-        </div>
-
-        <div class="dm-section">
-          <h3 class="dm-section-title">Death Saves</h3>
-          <div class="dm-death-saves">
-            <div class="dm-saves-row">
-              <span class="dm-saves-label">Successes</span>
-              ${[0,1,2].map(i => `
-                <input type="checkbox" class="dm-save-check success" data-type="successes" data-i="${i}"
-                  ${(ds.successes || 0) > i ? "checked" : ""} />
-              `).join("")}
-            </div>
-            <div class="dm-saves-row">
-              <span class="dm-saves-label">Failures</span>
-              ${[0,1,2].map(i => `
-                <input type="checkbox" class="dm-save-check failure" data-type="failures" data-i="${i}"
-                  ${(ds.failures || 0) > i ? "checked" : ""} />
-              `).join("")}
-            </div>
-            <button class="dm-btn dm-btn-neutral" id="dmBtnClearDS" style="margin-top:0.4rem">Clear All</button>
           </div>
         </div>
       </div>
@@ -741,7 +1100,8 @@ function renderCombatTab(char) {
     const c = characters[selectedCharId];
     const newHp = Math.max(0, (c.hp ?? 0) - amt);
     await updateDoc(charRef(), { hp: newHp });
-    dmLog("damage", "DM", `dealt ${amt} damage to ${c.name} (${newHp}/${c.hpMax ?? "?"} HP)`);
+    const dmgState = playerCombatState(newHp, c.hpMax);
+    dmLog("damage", "DM", `dealt ${amt} damage to ${c.name}${dmgState ? ` — ${c.name} ${dmgState}` : ""}`, c.locationId || null);
   });
   el.querySelector("#dmBtnHeal").addEventListener("click", async () => {
     const amt = parseInt(el.querySelector("#dmHpAmt").value) || 0;
@@ -749,7 +1109,8 @@ function renderCombatTab(char) {
     const c = characters[selectedCharId];
     const newHp = Math.min(c.hpMax ?? 9999, (c.hp ?? 0) + amt);
     await updateDoc(charRef(), { hp: newHp });
-    dmLog("heal", "DM", `healed ${c.name} for ${amt} HP (${newHp}/${c.hpMax ?? "?"} HP)`);
+    const healState = playerCombatState(newHp, c.hpMax);
+    dmLog("heal", "DM", `healed ${c.name} for ${amt} HP${healState ? ` — ${c.name} ${healState}` : ""}`, c.locationId || null);
   });
   el.querySelector("#dmBtnSetHP").addEventListener("click", async () => {
     const amt = parseInt(el.querySelector("#dmHpAmt").value);
@@ -766,20 +1127,6 @@ function renderCombatTab(char) {
     dmLog("system", "DM", `set ${c.name}'s max HP to ${amt}`);
   });
 
-  // Death saves
-  el.querySelectorAll(".dm-save-check").forEach(cb => {
-    cb.addEventListener("change", async () => {
-      const c = characters[selectedCharId];
-      const type = cb.dataset.type;
-      const i = parseInt(cb.dataset.i);
-      const saves = { successes: c.deathSaves?.successes || 0, failures: c.deathSaves?.failures || 0 };
-      saves[type] = cb.checked ? i + 1 : i;
-      await updateDoc(charRef(), { deathSaves: saves });
-    });
-  });
-  el.querySelector("#dmBtnClearDS").addEventListener("click", async () => {
-    await updateDoc(charRef(), { deathSaves: { successes: 0, failures: 0 } });
-  });
 }
 
 // ── STATS TAB ─────────────────────────────────────────────
@@ -823,28 +1170,66 @@ function renderStatsTab(char) {
     return row;
   }
 
+  const STAT_GROUPS = [
+    { label: "💪 Body",   stats: ["Might", "Agility", "Endurance"] },
+    { label: "🧠 Mind",   stats: ["Knowledge", "Perception", "Ingenuity"] },
+    { label: "👁️ Spirit", stats: ["Presence", "Will", "Empathy"] },
+  ];
+
+  function appendGroupedStats(container, valueGetter, classFn, onMinus, onPlus) {
+    STAT_GROUPS.forEach(({ label, stats: groupStats }) => {
+      const lbl = document.createElement("div");
+      lbl.className = "dm-stat-group-label";
+      lbl.textContent = label;
+      container.appendChild(lbl);
+      const grp = document.createElement("div");
+      grp.className = "dm-stat-group";
+      groupStats.forEach(stat => {
+        const val = valueGetter(stat);
+        const cls = classFn ? classFn(val) : "";
+        grp.appendChild(makeStatRow(stat, val, cls, onMinus(stat), onPlus(stat)));
+      });
+      container.appendChild(grp);
+    });
+  }
+
+  // Update a base stat and recalculate hpMax if Might or Endurance changed
+  async function setBaseStat(stat, delta) {
+    const c       = characters[selectedCharId];
+    const newVal  = (c?.stats?.[stat] ?? 0) + delta;
+    const patch   = { [`stats.${stat}`]: newVal };
+    if (stat === "Might" || stat === "Endurance") {
+      const newStats = { ...(c?.stats || {}), [stat]: newVal };
+      patch.hpMax    = calcHpMax(newStats);
+      // Clamp current HP to new max if it was exactly at max (levelling up)
+      if ((c?.hp ?? 0) >= (c?.hpMax ?? 0)) patch.hp = patch.hpMax;
+    }
+    await updateDoc(charRef(), patch);
+  }
+
   const baseGrid = el.querySelector("#dmBaseStatsGrid");
-  ALL_STATS.forEach(stat => {
-    const val = stats[stat] ?? 0;
-    baseGrid.appendChild(makeStatRow(stat, val, "", async () => {
-      await updateDoc(charRef(), { [`stats.${stat}`]: (characters[selectedCharId]?.stats?.[stat] ?? 0) - 1 });
-    }, async () => {
-      await updateDoc(charRef(), { [`stats.${stat}`]: (characters[selectedCharId]?.stats?.[stat] ?? 0) + 1 });
-    }));
-  });
+  appendGroupedStats(
+    baseGrid,
+    stat => stats[stat] ?? 0,
+    null,
+    stat => async () => setBaseStat(stat, -1),
+    stat => async () => setBaseStat(stat, +1)
+  );
 
   const modGrid = el.querySelector("#dmModStatsGrid");
-  ALL_STATS.forEach(stat => {
-    const val = mods[stat] ?? 0;
-    const cls = val > 0 ? "pos" : val < 0 ? "neg" : "";
-    modGrid.appendChild(makeStatRow(stat, val, cls, async () => {
+  appendGroupedStats(
+    modGrid,
+    stat => mods[stat] ?? 0,
+    val => val > 0 ? "pos" : val < 0 ? "neg" : "",
+    stat => async () => {
       const cur = characters[selectedCharId]?.statModifiers?.[stat] ?? 0;
       await updateDoc(charRef(), { [`statModifiers.${stat}`]: cur - 1 });
-    }, async () => {
+    },
+    stat => async () => {
       const cur = characters[selectedCharId]?.statModifiers?.[stat] ?? 0;
       await updateDoc(charRef(), { [`statModifiers.${stat}`]: cur + 1 });
-    }));
-  });
+    }
+  );
 
   el.querySelector("#dmBtnClearMods").addEventListener("click", async () => {
     const updates = {};
@@ -906,6 +1291,10 @@ function renderInventoryTab(char) {
                 </label>
               `).join("")}
             </div>
+            <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;color:var(--dm-muted);cursor:pointer">
+              <input type="checkbox" id="dmEEquipped" style="cursor:pointer" />
+              Add as equipped (stat effects apply immediately)
+            </label>
             <button class="dm-btn dm-btn-heal" id="dmBtnAddEquipment" style="width:100%">Add Equipment</button>
           </div>
         </details>
@@ -968,7 +1357,7 @@ function renderInventoryTab(char) {
       emoji:   el.querySelector("#dmEEmoji").value.trim() || "⚔️",
       type:    el.querySelector("#dmEType").value,
       weight:  parseFloat(el.querySelector("#dmEWeight").value) || 1,
-      equipped: false,
+      equipped: !!el.querySelector("#dmEEquipped")?.checked,
     };
     const damage = el.querySelector("#dmEDamage").value.trim();
     const armor  = parseInt(el.querySelector("#dmEArmor").value) || 0;
@@ -1052,130 +1441,349 @@ function makeInvRow(item, realIdx, char, isConsumable) {
     });
 
     div.append(typeEl, equipBtn, del);
+
+    // Show stat effects if any
+    if (item.statEffects && Object.keys(item.statEffects).length) {
+      const effectsRow = document.createElement("div");
+      effectsRow.className = "dm-inv-effects";
+      effectsRow.innerHTML = Object.entries(item.statEffects)
+        .filter(([, v]) => v !== 0)
+        .map(([stat, val]) => {
+          const cls = val > 0 ? "pos" : "neg";
+          return `<span class="dm-inv-effect-chip ${cls}">${stat} ${val > 0 ? "+" : ""}${val}</span>`;
+        }).join("");
+      div.appendChild(effectsRow);
+    }
   }
 
   return div;
 }
 
 // ── SPELLS TAB ───────────────────────────────────────────
+const TIER_LABELS = {
+  1: "Tier 1 — Subtle",
+  2: "Tier 2 — Visible",
+  3: "Tier 3 — Flashy",
+  4: "Tier 4 — Mythic",
+};
+const BLOODLINE_ICONS = { Nasht: "💪", Aremu: "🧠", Anubet: "👁️" };
+
+function spellTier(spell) {
+  if (spell.tier) return spell.tier;
+  if (spell.level === 0) return 1;
+  if (spell.level <= 2)  return 1;
+  if (spell.level <= 4)  return 2;
+  if (spell.level <= 6)  return 3;
+  return 4;
+}
+
+const DM_TIER_THRESHOLDS = [null, 10, 13, 16, 19];
+const DM_TIER_COST       = [null, "1 call", "1 call", "2 calls", "3 calls · once/session"];
+const DM_TIER_COOLDOWNS  = [null, 3, 5, 7, 9]; // turns
+const DM_BLOODLINES      = [
+  { key: "Nasht",  statKeys: ["Might","Agility","Endurance"] },
+  { key: "Aremu",  statKeys: ["Knowledge","Perception","Ingenuity"] },
+  { key: "Anubet", statKeys: ["Presence","Will","Empathy"] },
+];
+
 function renderSpellsTab(char) {
-  const el     = document.getElementById("dm-tab-spells");
-  const spells = char.spells     || [];
-  const slots  = char.spellSlots || {};
-  const sortedSlots = Object.entries(slots).sort(([a], [b]) => a.localeCompare(b));
+  const el         = document.getElementById("dm-tab-spells");
+  const stats      = char.stats || {};
+  const cooldowns  = char.abilityCooldowns || {};
+  const callsUsed  = char.callsUsed  || 0;
+  const callsTotal = calcCallBudget(stats);
+  const recovery   = calcRecovery(stats);
+
+  // Bloodline sums
+  const sums = {};
+  DM_BLOODLINES.forEach(bl => {
+    sums[bl.key] = bl.statKeys.reduce((t, s) => t + (stats[s] || 0), 0);
+  });
+
+  // Summary header HTML
+  const summaryHtml = DM_BLOODLINES.map(({ key }) =>
+    `<span class="dm-spell-bl-chip ${sums[key] >= DM_TIER_THRESHOLDS[1] ? "unlocked" : "locked"}">
+      ${BLOODLINE_ICONS[key]} ${key} <strong>${sums[key]}</strong>
+    </span>`
+  ).join("");
+
+  const callPips = Array.from({ length: callsTotal }, (_, i) =>
+    `<span class="dm-call-pip${i < callsUsed ? " used" : ""}"></span>`
+  ).join("");
 
   el.innerHTML = `
     <div class="dm-section">
-      <h3 class="dm-section-title">Spell Slots</h3>
-      ${sortedSlots.length
-        ? `<div class="dm-spell-slots-grid" id="dmSpellSlotsGrid"></div>`
-        : `<p class="dm-empty">No spell slots.</p>`}
-    </div>
-    <div class="dm-section">
       <h3 class="dm-section-title">
-        Spells
-        <span class="dm-spells-hint">Type a dice formula in the 🎲 column to link a roll</span>
+        Abilities
+        <span class="dm-spells-hint">Hover for description · 🔒 = locked</span>
       </h3>
-      ${spells.length
-        ? `<div class="dm-spell-list" id="dmSpellList"></div>`
-        : `<p class="dm-empty">No spells configured for this character.</p>`}
+      <div class="dm-spell-bl-summary">${summaryHtml}</div>
+      <div class="dm-call-budget-bar">
+        <span class="dm-call-budget-label">🧠 Calls <strong>${callsTotal - callsUsed}/${callsTotal}</strong></span>
+        <div class="dm-call-pips">${callPips}</div>
+        <span class="dm-call-recovery">👁️ +${recovery} HP / turn end</span>
+        <button class="dm-btn dm-btn-neutral dm-btn-sm" id="dmResetCalls" title="Reset calls (New Turn resets automatically)">↺ Reset</button>
+      </div>
+      <div class="dm-spell-list" id="dmSpellList"></div>
     </div>
   `;
 
-  // ── Slot tracker ──────────────────────────────────────
-  if (sortedSlots.length) {
-    const grid = el.querySelector("#dmSpellSlotsGrid");
-    sortedSlots.forEach(([level, info]) => {
-      const used  = info.used  ?? 0;
-      const total = info.total ?? 0;
-      const row   = document.createElement("div");
-      row.className = "dm-spell-slot-row";
-      const pips = Array.from({ length: total }, (_, i) =>
-        `<span class="dm-slot-pip${i < used ? " used" : ""}"></span>`
-      ).join("");
-      row.innerHTML = `
-        <span class="dm-spell-slot-label">${level}</span>
-        <div class="dm-slot-pips">${pips}</div>
-        <span class="dm-spell-slot-count">${used}/${total}</span>
-        <button class="dm-btn dm-btn-neutral dm-btn-sm" data-level="${level}" data-action="reset">Reset</button>
-        <button class="dm-stat-btn" data-level="${level}" data-action="minus" ${used <= 0 ? "disabled" : ""}>−</button>
-        <button class="dm-stat-btn" data-level="${level}" data-action="plus"  ${used >= total ? "disabled" : ""}>+</button>
-      `;
-      grid.appendChild(row);
+  const list = el.querySelector("#dmSpellList");
+
+  // Build ability map per bloodline
+  const byBloodline = {};
+  Object.entries(ABILITY_DB).forEach(([name, ab]) => {
+    (byBloodline[ab.bloodline] = byBloodline[ab.bloodline] || []).push({ name, ...ab });
+  });
+
+  // Sort bloodlines by sum descending (most unlocked first)
+  const sortedDmBloodlines = [...DM_BLOODLINES].sort((a, b) => sums[b.key] - sums[a.key]);
+
+  sortedDmBloodlines.forEach(({ key }) => {
+    const sum = sums[key];
+    // Unlocked tiers first, then locked — within each group sort by tier asc
+    const abilities = (byBloodline[key] || []).sort((a, b) => {
+      const aU = sum >= DM_TIER_THRESHOLDS[a.tier] ? 0 : 1;
+      const bU = sum >= DM_TIER_THRESHOLDS[b.tier] ? 0 : 1;
+      if (aU !== bU) return aU - bU;
+      return a.tier - b.tier || a.name.localeCompare(b.name);
     });
 
-    grid.addEventListener("click", async e => {
-      const { level, action } = e.target.dataset;
-      if (!level || !action) return;
-      const c   = characters[selectedCharId];
-      const cur = c.spellSlots?.[level] ?? { total: 0, used: 0 };
-      let newUsed = cur.used ?? 0;
-      if      (action === "reset") newUsed = 0;
-      else if (action === "minus") newUsed = Math.max(0, newUsed - 1);
-      else if (action === "plus")  newUsed = Math.min(cur.total ?? 0, newUsed + 1);
-      else return;
-      await updateDoc(charRef(), { [`spellSlots.${level}.used`]: newUsed });
-    });
-  }
+    // Bloodline header
+    const blHdr = document.createElement("div");
+    blHdr.className = "dm-spell-tier-header dm-spell-bl-header";
+    blHdr.textContent = `${BLOODLINE_ICONS[key]} ${key}  ·  ${sum} pts`;
+    list.appendChild(blHdr);
 
-  // ── Spell list ────────────────────────────────────────
-  if (spells.length) {
-    const list = el.querySelector("#dmSpellList");
+    let lastTier = 0;
+    abilities.forEach(ability => {
+      const unlocked   = sum >= gsThreshold(ability.tier);
+      const cdLeft     = cooldowns[ability.name] || 0;
+      const onCooldown = cdLeft > 0;
 
-    // Header row
-    const hdr = document.createElement("div");
-    hdr.className = "dm-spell-row dm-spell-row--header";
-    hdr.innerHTML = `
-      <span></span>
-      <span>Name</span>
-      <span>Level · Type</span>
-      <span>Casting</span>
-      <span>🎲 Dice</span>
-    `;
-    list.appendChild(hdr);
+      if (ability.tier !== lastTier) {
+        lastTier = ability.tier;
+        const needed = gsThreshold(ability.tier);
+        const tierHdr = document.createElement("div");
+        tierHdr.className = "dm-spell-row dm-spell-row--header" + (unlocked ? "" : " dm-spell-row--locked-hdr");
+        tierHdr.innerHTML = unlocked
+          ? `<span style="grid-column:1/3">${TIER_LABELS[ability.tier]}</span><span>${DM_TIER_COST[ability.tier]} · ${gsCooldown(ability.tier)}t cd</span><span></span>`
+          : `<span style="grid-column:1/3">${TIER_LABELS[ability.tier]}  🔒 need ${needed}</span><span></span><span></span>`;
+        list.appendChild(tierHdr);
+      }
 
-    spells.forEach((spell, idx) => {
-      const row = document.createElement("div");
-      row.className = "dm-spell-row";
-      const levelLabel = spell.level === 0 ? "Cantrip" : `Lvl ${spell.level}`;
-      const catLabel   = spell.category || "general";
-      const catIcon    = catLabel === "attack" ? "⚔️" : catLabel === "defense" ? "🛡️" : "✨";
+      const desc = ability.description || "";
+      const row  = document.createElement("div");
+      row.className = "dm-spell-row dm-spell-row--ability"
+        + (unlocked ? "" : " dm-spell-row--locked")
+        + (onCooldown ? " dm-spell-row--cooldown" : "");
+      if (desc) { row.setAttribute("data-tooltip", desc); row.classList.add("has-tooltip"); }
+
+      const cdHtml = onCooldown
+        ? `<span class="dm-cd-badge">⏳ ${cdLeft}t</span>
+           <button class="dm-stat-btn dm-cd-minus" data-ability="${ability.name}" title="−1 turn">−</button>
+           <button class="dm-stat-btn dm-stat-btn-danger dm-cd-reset" data-ability="${ability.name}" title="Reset cooldown">✕</button>`
+        : `<span class="dm-spell-lock">${unlocked ? "" : "🔒"}</span><span></span><span></span>`;
+
       row.innerHTML = `
-        <span class="dm-spell-cat-icon" title="${catLabel}">${catIcon}</span>
-        <span class="dm-spell-name">${spell.name}</span>
-        <span class="dm-spell-meta">${levelLabel} · ${catLabel}</span>
-        <span class="dm-spell-cast">${spell.castingTime || "—"}</span>
+        <span class="dm-spell-cat-icon">${BLOODLINE_ICONS[key]}</span>
+        <span class="dm-spell-name">${ability.name}</span>
         <input class="dm-input dm-spell-dice-input" type="text"
-          value="${spell.damage || ""}"
-          placeholder="e.g. 2d10"
-          data-idx="${idx}" />
+          value="" placeholder="e.g. 2d6"
+          data-ability="${ability.name}"
+          ${unlocked && !onCooldown ? "" : "disabled"} />
+        ${cdHtml}
       `;
       list.appendChild(row);
     });
+  });
 
-    list.querySelectorAll(".dm-spell-dice-input").forEach(input => {
-      const save = async () => {
-        const idx      = parseInt(input.dataset.idx);
-        const c        = characters[selectedCharId];
-        const newSpells = (c.spells || []).map((s, i) => {
-          if (i !== idx) return s;
-          const updated = { ...s };
-          if (input.value.trim()) updated.damage = input.value.trim();
-          else delete updated.damage;
-          return updated;
-        });
-        await updateDoc(charRef(), { spells: newSpells });
-      };
-      input.addEventListener("blur",    save);
-      input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); });
+  // Dice formula inputs
+  const abilityDice = char.abilityDice || {};
+  list.querySelectorAll(".dm-spell-dice-input").forEach(input => {
+    const name = input.dataset.ability;
+    input.value = abilityDice[name] || "";
+    const save = async () => {
+      const val = input.value.trim();
+      const k   = `abilityDice.${name}`;
+      if (val) await updateDoc(charRef(), { [k]: val });
+      else     await updateDoc(charRef(), { [k]: deleteField() });
+    };
+    input.addEventListener("blur",    save);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); });
+  });
+
+  // Call budget reset button
+  el.querySelector("#dmResetCalls")?.addEventListener("click", async () => {
+    await updateDoc(charRef(), { callsUsed: 0 });
+  });
+
+  // Cooldown −1 and reset buttons
+  list.querySelectorAll(".dm-cd-minus").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const name = btn.dataset.ability;
+      const cur  = (characters[selectedCharId]?.abilityCooldowns?.[name] || 0);
+      const next = cur - 1;
+      if (next <= 0) await updateDoc(charRef(), { [`abilityCooldowns.${name}`]: deleteField() });
+      else           await updateDoc(charRef(), { [`abilityCooldowns.${name}`]: next });
     });
+  });
+  list.querySelectorAll(".dm-cd-reset").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      await updateDoc(charRef(), { [`abilityCooldowns.${btn.dataset.ability}`]: deleteField() });
+    });
+  });
+}
+
+// ── SETTINGS TAB ─────────────────────────────────────────
+function renderSettingsTab() {
+  const el = document.getElementById("dm-tab-settings");
+
+  const th = gameSettings.tierThresholds || {};
+  const tc = gameSettings.tierCooldowns  || {};
+
+  const TIER_ROWS = [
+    { tier: 1, label: "Tier 1 — Subtle",  color: "#9a8a7a" },
+    { tier: 2, label: "Tier 2 — Visible", color: "#a07040" },
+    { tier: 3, label: "Tier 3 — Flashy",  color: "#c06030" },
+    { tier: 4, label: "Tier 4 — Mythic",  color: "#8050c0" },
+  ];
+
+  el.innerHTML = `
+    <div class="dm-section">
+      <h3 class="dm-section-title">⚙️ Game Rules</h3>
+      <p class="dm-settings-hint">Changes save instantly and affect all player sheets live.</p>
+
+      <h4 class="dm-settings-sub">HP Formula</h4>
+      <p class="dm-settings-desc">hpMax = Base + (Endurance × End.Mult) + (Might × Might.Mult)</p>
+      <div class="dm-settings-grid" id="dmSettingsHp"></div>
+
+      <h4 class="dm-settings-sub" style="margin-top:1.2rem">Call Budget (Mind / Aremu)</h4>
+      <p class="dm-settings-desc">Calls per turn = Aremu sum × multiplier.<br>Resets on New Turn.</p>
+      <div class="dm-settings-grid" id="dmSettingsCalls"></div>
+
+      <h4 class="dm-settings-sub" style="margin-top:1.2rem">Scene Recovery (Spirit / Anubet)</h4>
+      <p class="dm-settings-desc">HP recovered on turn end = ⌈Anubet sum ÷ divisor⌉.</p>
+      <div class="dm-settings-grid" id="dmSettingsRecovery"></div>
+
+      <h4 class="dm-settings-sub" style="margin-top:1.2rem">Ability Unlock Thresholds</h4>
+      <p class="dm-settings-desc">Bloodline stat sum required to access each tier.<br>
+        (Nasht = Might+Agility+Endurance, etc.)</p>
+      <div class="dm-settings-grid" id="dmSettingsThresholds"></div>
+
+      <h4 class="dm-settings-sub" style="margin-top:1.2rem">Ability Cooldowns</h4>
+      <p class="dm-settings-desc">Turns an ability is locked after use.</p>
+      <div class="dm-settings-grid" id="dmSettingsCooldowns"></div>
+
+      <button class="dm-btn dm-btn-neutral" id="dmSettingsReset" style="margin-top:1rem;width:100%">
+        ↺ Reset All to Defaults
+      </button>
+    </div>
+  `;
+
+  // Shared save helper — merges a patch into settings/game
+  async function saveSetting(patch) {
+    await setDoc(doc(db, "settings", "game"), { ...gameSettings, ...patch }, { merge: true });
   }
+
+  // Generic row builder
+  function makeRow(containerId, label, color, value, unit, min, max, onSave, step = 1) {
+    const container = el.querySelector(`#${containerId}`);
+    const row = document.createElement("div");
+    row.className = "dm-settings-row";
+    row.innerHTML = `
+      <span class="dm-settings-tier-label" style="color:${color}">${label}</span>
+      <input class="dm-input dm-settings-input" type="number"
+        min="${min}" max="${max}" step="${step}" value="${value}" />
+      <span class="dm-settings-unit">${unit}</span>
+    `;
+    const input = row.querySelector("input");
+    const save = async () => {
+      const val = step < 1 ? parseFloat(input.value) : parseInt(input.value);
+      if (isNaN(val) || val < min) return;
+      await onSave(val);
+    };
+    input.addEventListener("blur",    save);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); });
+    container.appendChild(row);
+  }
+
+  // ── HP formula ──────────────────────────────────────────
+  makeRow("dmSettingsHp", "Base HP",            "#9a8a7a", gsHpBase(),      "pts",    0, 30,  1,
+    async val => saveSetting({ hpBase: val }));
+  makeRow("dmSettingsHp", "Endurance ×",        "#a07040", gsHpEndMult(),   "/ pt",   0, 10,  1,
+    async val => saveSetting({ hpEnduranceMult: val }));
+  makeRow("dmSettingsHp", "Might ×",            "#c06030", gsHpMightMult(), "/ pt",   0, 10,  1,
+    async val => saveSetting({ hpMightMult: val }));
+
+  // ── Call budget ─────────────────────────────────────────
+  makeRow("dmSettingsCalls", "Aremu multiplier", "#6a8aba", gsCallMult(),    "× sum",  0.1, 5, 0.1,
+    async val => saveSetting({ callBudgetMult: val }), 0.1);
+
+  // ── Scene recovery ──────────────────────────────────────
+  makeRow("dmSettingsRecovery", "Recovery divisor", "#6a8a6a", gsRecoveryDiv(), "÷ Anubet", 1, 20, 1,
+    async val => saveSetting({ recoveryDivisor: val }));
+
+  // ── Ability tiers ────────────────────────────────────────
+  TIER_ROWS.forEach(({ tier, label, color }) => {
+    makeRow("dmSettingsThresholds", label, color, gsThreshold(tier), "pts", 1, 50, 1,
+      async val => saveSetting({ tierThresholds: { ...gameSettings.tierThresholds, [tier]: val } }));
+    makeRow("dmSettingsCooldowns", label, color, gsCooldown(tier), "turns", 1, 20, 1,
+      async val => saveSetting({ tierCooldowns: { ...gameSettings.tierCooldowns, [tier]: val } }));
+  });
+
+  el.querySelector("#dmSettingsReset").addEventListener("click", async () => {
+    await setDoc(doc(db, "settings", "game"), {
+      tierThresholds:  { 1: 10, 2: 13, 3: 16, 4: 19 },
+      tierCooldowns:   { 1: 3,  2: 5,  3: 7,  4: 9  },
+      hpBase:          5,
+      hpEnduranceMult: 3,
+      hpMightMult:     1,
+      callBudgetMult:  1,
+      recoveryDivisor: 3,
+    });
+  });
 }
 
 // ── LOG TAB ───────────────────────────────────────────────
 function renderLogTab(char) {
   const el = document.getElementById("dm-tab-log");
+
+  // Build voice options: all characters + monsters/NPCs
+  const charOptions = Object.values(characters)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(c => `<option value="char:${c.id}">${c.emoji || "🧑"} ${c.name}</option>`)
+    .join("");
+  const monsterOptions = Object.values(monsters)
+    .sort((a, b) => (a.name||"").localeCompare(b.name||""))
+    .map(m => `<option value="mon:${m.id}">${m.type === "npc" ? "🧑" : "👾"} ${m.name}</option>`)
+    .join("");
+
   el.innerHTML = `
+    <div class="dm-section">
+      <h3 class="dm-section-title">💬 Speak As…</h3>
+      <p class="dm-speak-hint">Message appears in the location log as if sent by that character — no DM label.</p>
+      <div class="dm-form-fields" style="flex-wrap:wrap">
+        <select class="dm-input" id="dmSpeakAs" style="flex:2;min-width:150px">
+          ${charOptions ? `<optgroup label="Characters">${charOptions}</optgroup>` : ""}
+          ${monsterOptions ? `<optgroup label="Monsters &amp; NPCs">${monsterOptions}</optgroup>` : ""}
+        </select>
+        <select class="dm-input" id="dmSpeakType" style="flex:none;width:auto">
+          <option value="roleplay">💬 Roleplay</option>
+          <option value="system">📢 Narration</option>
+          <option value="combat">⚔️ Combat</option>
+        </select>
+      </div>
+      <textarea class="dm-input dm-speak-textarea" id="dmSpeakMsg"
+        placeholder="Write the message in character…" rows="3"></textarea>
+      <div class="dm-form-fields" style="margin-top:0.35rem">
+        <button class="dm-btn dm-btn-heal"    id="dmBtnSpeak">Send</button>
+        <button class="dm-btn dm-btn-narrate" id="dmBtnNarrate">✨ Narrate</button>
+        <button class="dm-btn-link dm-ai-undo-btn hidden" id="dmSpeakUndo">↩ Undo</button>
+        <span class="dm-speak-status" id="dmSpeakStatus"></span>
+      </div>
+    </div>
+
     <div class="dm-section">
       <h3 class="dm-section-title">Add Session Event</h3>
       <div class="dm-form-fields">
@@ -1191,6 +1799,19 @@ function renderLogTab(char) {
         <button class="dm-btn dm-btn-neutral" id="dmBtnAddLog">Add Event</button>
       </div>
     </div>
+
+    <div class="dm-section">
+      <h3 class="dm-section-title">🔒 Character Claim — ${char.name}</h3>
+      <div class="dm-email-char-row">
+        <span style="font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--dm-muted);min-width:50px;">Status</span>
+        ${char.claimedBy
+          ? `<span class="dm-email-value">claimed (code: <strong>${char.claimedBy}</strong>)</span>
+             <button class="dm-btn dm-btn-sm dm-stat-btn-danger" id="dmBtnUnclaim">Unclaim</button>`
+          : `<span class="dm-email-none">Unclaimed</span>`
+        }
+      </div>
+    </div>
+
     <div class="dm-section">
       <h3 class="dm-section-title">Character Notes — ${char.name}</h3>
       <textarea class="dm-notes-area" id="dmNotesArea" placeholder="Notes for ${char.name}…">${char.notes || ""}</textarea>
@@ -1198,17 +1819,119 @@ function renderLogTab(char) {
     </div>
   `;
 
+  // ── Speak As handler ────────────────────────────────────
+  el.querySelector("#dmBtnSpeak").addEventListener("click", async () => {
+    const raw     = el.querySelector("#dmSpeakAs").value;
+    const type    = el.querySelector("#dmSpeakType").value;
+    const message = el.querySelector("#dmSpeakMsg").value.trim();
+    const status  = el.querySelector("#dmSpeakStatus");
+    if (!message || !raw) return;
+
+    const [kind, id] = raw.split(":");
+    let actor, charId, locationId, emoji;
+
+    if (kind === "char") {
+      const c  = characters[id];
+      if (!c) return;
+      actor      = c.name;
+      charId     = id;
+      locationId = c.locationId || null;
+      emoji      = c.emoji || null;
+    } else {
+      const m = monsters[id];
+      if (!m) return;
+      actor      = m.name;
+      charId     = null;
+      locationId = selectedTurnLocId !== "__global__" ? selectedTurnLocId : null;
+      emoji      = m.type === "npc" ? "🧑" : "👾";
+    }
+
+    const entry = { type, actor, message, timestamp: serverTimestamp(), charId };
+    if (locationId) entry.locationId = locationId;
+    if (emoji)      entry.emoji      = emoji;
+
+    status.textContent = "Sending…";
+    const speakT = await translateMessage(message);
+    await addDoc(collection(db, "sessionLog"), { ...entry, ...speakT });
+    el.querySelector("#dmSpeakMsg").value = "";
+    status.textContent = "✓ Sent";
+    setTimeout(() => { status.textContent = ""; }, 2000);
+  });
+
+  // Ctrl/Cmd+Enter sends; Ctrl/Cmd+Shift+Enter narrates
+  el.querySelector("#dmSpeakMsg").addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      if (e.shiftKey) el.querySelector("#dmBtnNarrate").click();
+      else            el.querySelector("#dmBtnSpeak").click();
+    }
+  });
+
+  // ── Narrate button ───────────────────────────────────────
+  el.querySelector("#dmBtnNarrate").addEventListener("click", async () => {
+    const raw      = el.querySelector("#dmSpeakAs").value;
+    const type     = el.querySelector("#dmSpeakType").value;
+    const textarea = el.querySelector("#dmSpeakMsg");
+    const status   = el.querySelector("#dmSpeakStatus");
+    const undoBtn  = el.querySelector("#dmSpeakUndo");
+    const narBtn   = el.querySelector("#dmBtnNarrate");
+    const text     = textarea.value.trim();
+    if (!text || !raw) return;
+
+    // Get actor display meta for the prompt
+    const [kind, id] = raw.split(":");
+    let actorName, actorMeta;
+    if (kind === "char") {
+      const c  = characters[id];
+      actorName = c?.name || "Character";
+      actorMeta = [c?.race, c?.class].filter(Boolean).join(" ");
+    } else {
+      const m   = monsters[id];
+      actorName = m?.name || "Creature";
+      actorMeta = m?.type === "npc" ? "NPC" : "Monster";
+    }
+
+    narBtn.disabled = true;
+    undoBtn.classList.add("hidden");
+    status.textContent = "✨ Narrating…";
+    status.className   = "dm-speak-status";
+
+    try {
+      const originalText = text;
+      const enhanced     = await callClaudeSpeakAs(text, actorName, actorMeta, type);
+      textarea.value = enhanced;
+      status.textContent = "";
+      undoBtn.classList.remove("hidden");
+      undoBtn.onclick = () => {
+        textarea.value = originalText;
+        undoBtn.classList.add("hidden");
+      };
+    } catch (err) {
+      status.textContent = "⚠ " + err.message;
+      status.className   = "dm-speak-status error";
+    } finally {
+      narBtn.disabled = false;
+    }
+  });
+
   el.querySelector("#dmBtnAddLog").addEventListener("click", async () => {
     const type    = el.querySelector("#dmLogType").value;
     const actor   = el.querySelector("#dmLogActor").value.trim() || "DM";
     const message = el.querySelector("#dmLogMsg").value.trim();
     if (!message) return;
+    const logT = await translateMessage(message);
     await addDoc(collection(db, "sessionLog"), {
-      type, actor, message,
+      type, actor, message, ...logT,
       timestamp: serverTimestamp(),
       charId: selectedCharId || null,
     });
     el.querySelector("#dmLogMsg").value = "";
+  });
+
+  el.querySelector("#dmBtnUnclaim")?.addEventListener("click", async () => {
+    if (!confirm(`Unclaim ${char.name}? This removes the access code, allowing anyone to claim it again.`)) return;
+    await updateDoc(charRef(), { claimedBy: deleteField() });
+    if (characters[selectedCharId]) delete characters[selectedCharId].claimedBy;
+    renderLogTab(characters[selectedCharId]);
   });
 
   el.querySelector("#dmBtnSaveNotes").addEventListener("click", async () => {
@@ -1216,6 +1939,7 @@ function renderLogTab(char) {
     await updateDoc(charRef(), { notes });
     dmLog("system", "DM", `updated notes for ${char.name}`);
   });
+
 }
 
 // ── LOCATIONS TAB ─────────────────────────────────────────
@@ -1321,6 +2045,35 @@ function makeLocColumn(locId, emoji, name, locData, chars) {
     spectLabel.appendChild(spectRadio);
     spectLabel.appendChild(spectIcon);
     header.appendChild(spectLabel);
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "dm-btn-edit dm-loc-edit";
+    editBtn.title = "Edit location";
+    editBtn.textContent = "✏️";
+    editBtn.addEventListener("click", () => {
+      const editRow = document.createElement("div");
+      editRow.className = "dm-loc-edit-row";
+      editRow.innerHTML = `
+        <input class="dm-input dm-loc-edit-emoji" value="${locData.emoji || "🗺️"}" maxlength="4" style="width:54px;flex:none" />
+        <input class="dm-input dm-loc-edit-name" value="${locData.name || ""}" style="flex:1;min-width:100px" />
+        <input class="dm-input dm-loc-edit-desc" value="${locData.description || ""}" placeholder="Description (optional)" style="flex:2;min-width:120px" />
+        <button class="dm-btn dm-btn-heal dm-btn-sm">Save</button>
+        <button class="dm-btn dm-btn-neutral dm-btn-sm">✕</button>
+      `;
+      const [saveBtn, cancelBtn] = editRow.querySelectorAll("button");
+      cancelBtn.addEventListener("click", () => editRow.remove());
+      saveBtn.addEventListener("click", async () => {
+        const newName  = editRow.querySelector(".dm-loc-edit-name").value.trim();
+        const newEmoji = editRow.querySelector(".dm-loc-edit-emoji").value.trim() || "🗺️";
+        const newDesc  = editRow.querySelector(".dm-loc-edit-desc").value.trim();
+        if (!newName) return;
+        await updateDoc(doc(db, "locations", locId), { name: newName, emoji: newEmoji, description: newDesc });
+        dmLog("system", "DM", `renamed location to "${newName}"`);
+        editRow.remove();
+      });
+      col.insertBefore(editRow, col.querySelector(".dm-loc-drop-zone"));
+    });
+    header.appendChild(editBtn);
 
     const delBtn = document.createElement("button");
     delBtn.className = "dm-btn-del dm-loc-del";
@@ -1551,14 +2304,19 @@ function makeMonsterCard(m, isInstance, instanceCountOrNum) {
   card.querySelector(".dm-enc-dmg").addEventListener("click", async () => {
     const amt = parseInt(amtInput.value) || 0;
     if (!amt) return;
-    const cur   = monsters[m.id]?.hp ?? 0;
-    const newHp = Math.max(0, cur - amt);
+    const cur    = monsters[m.id]?.hp ?? 0;
+    const newHp  = Math.max(0, cur - amt);
     await updateDoc(mRef, { hp: newHp });
-    await addDoc(collection(db, "sessionLog"), {
+    const slain  = newHp <= 0 ? " — slain!" : "";
+    const encLoc = findMonsterLocId(m.id);
+    const encEntry = {
       type: "damage", actor: "DM",
-      message: `${label} took ${amt} damage (${newHp}/${m.hpMax} HP)`,
+      message: `${label} took ${amt} damage${slain}`,
       timestamp: serverTimestamp(), charId: null,
-    });
+    };
+    if (encLoc) encEntry.locationId = encLoc;
+    const encRef = await addDoc(collection(db, "sessionLog"), encEntry);
+    translateAndUpdate(encRef, encEntry.message);
     amtInput.value = "";
   });
 
@@ -1615,6 +2373,85 @@ function makeCharChip(char) {
 
 // ── SCENES TAB ────────────────────────────────────────────
 
+const DM_LOG_ICONS = { damage: "⚔️", heal: "💚", spell: "✨", slot: "🔮", condition: "🌀", inventory: "🎒", death: "💀", note: "📜", roll: "🎲", turn: "🔔", action: "🗣️", default: "📖" };
+
+let dmLogLang = localStorage.getItem("dmLogLang") || "en";
+
+function pickDmMsg(data) {
+  if (dmLogLang === "hu" && data.messageHU) return data.messageHU;
+  if (dmLogLang === "en" && data.messageEN) return data.messageEN;
+  return data.message || "";
+}
+
+function setDmLogLang(lang) {
+  dmLogLang = lang;
+  localStorage.setItem("dmLogLang", lang);
+  document.querySelectorAll(".dm-scene-lang-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.lang === lang);
+  });
+  rerenderDmLog();
+}
+
+function buildDmLogEntry(id, data) {
+  const el = document.createElement("div");
+  const isTurn = data.type === "turn";
+  el.className = "spec-log-entry dm-log-entry-deletable" + (isTurn ? " spec-log-entry--turn" : "");
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "dm-log-del-btn";
+  delBtn.title = "Delete entry";
+  delBtn.textContent = "✕";
+  delBtn.addEventListener("click", async () => {
+    if (!confirm("Delete this log entry?")) return;
+    try { await deleteDoc(doc(db, "sessionLog", id)); } catch (e) { console.error("Delete failed:", e); }
+  });
+
+  if (isTurn) {
+    el.innerHTML = `<div class="spec-log-turn-inner">
+         <span class="spec-log-turn-label">DM</span>
+         <span class="spec-log-turn-text">${pickDmMsg(data)}</span>
+       </div>`;
+  } else {
+    el.innerHTML = `<span class="spec-log-icon">${DM_LOG_ICONS[data.type] || DM_LOG_ICONS.default}</span>
+       <div class="spec-log-content">
+         <span class="spec-log-actor">${data.actor || "?"}</span>
+         <span class="spec-log-msg">${pickDmMsg(data)}</span>
+       </div>`;
+  }
+  el.appendChild(delBtn);
+  return el;
+}
+
+function rerenderDmLog() {
+  const feed = document.getElementById("dmSceneLogFeed");
+  if (!feed) return;
+  const locId = selectedSceneLocId;
+  const charIds = Object.values(characters)
+    .filter(c => c.locationId === locId)
+    .map(c => c.id);
+
+  const visible = Object.entries(dmLogEntries)
+    .filter(([, e]) => {
+      const d = e.data;
+      if (d.locationId) return d.locationId === locId;
+      if (d.charId) return charIds.includes(d.charId);
+      return false;
+    })
+    .sort(([, a], [, b]) => {
+      const ta = a.data.timestamp?.seconds ?? Number.MAX_SAFE_INTEGER;
+      const tb = b.data.timestamp?.seconds ?? Number.MAX_SAFE_INTEGER;
+      return tb - ta;
+    });
+
+  feed.innerHTML = "";
+  if (!visible.length) {
+    feed.innerHTML = `<div class="spec-log-empty">No events for this location yet…</div>`;
+    return;
+  }
+  // Rebuild from data each time so lang changes are reflected immediately
+  visible.forEach(([id, e]) => feed.appendChild(buildDmLogEntry(id, e.data)));
+}
+
 function renderScenesTab() {
   const el = document.getElementById("dm-tab-scenes");
   const sortedLocs = Object.values(locations).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -1630,24 +2467,44 @@ function renderScenesTab() {
   }
 
   el.innerHTML = `
-    <div class="dm-scene-loc-selector">
-      <span class="dm-scene-loc-label">Location</span>
-      <select class="dm-input dm-scene-loc-select" id="sceneLocSelect">
-        ${sortedLocs.map(l =>
-          `<option value="${l.id}"${l.id === selectedSceneLocId ? " selected" : ""}>${l.emoji || "🗺️"} ${l.name}</option>`
-        ).join("")}
-      </select>
+    <div class="dm-scenes-layout">
+      <div class="dm-scenes-main">
+        <div class="dm-scene-loc-selector">
+          <span class="dm-scene-loc-label">Location</span>
+          <select class="dm-input dm-scene-loc-select" id="sceneLocSelect">
+            ${sortedLocs.map(l =>
+              `<option value="${l.id}"${l.id === selectedSceneLocId ? " selected" : ""}>${l.emoji || "🗺️"} ${l.name}</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div id="dmScenePanelsWrap"></div>
+      </div>
+      <div class="dm-scenes-log spec-log-col">
+        <div class="spec-log-header">
+          <span>📜 Location Log</span>
+          <div class="spec-lang-toggle">
+            <button class="dm-scene-lang-btn spec-lang-btn${dmLogLang === "en" ? " active" : ""}" data-lang="en">EN</button>
+            <button class="dm-scene-lang-btn spec-lang-btn${dmLogLang === "hu" ? " active" : ""}" data-lang="hu">HU</button>
+          </div>
+        </div>
+        <div class="spec-log-feed" id="dmSceneLogFeed"></div>
+      </div>
     </div>
-    <div id="dmScenePanelsWrap"></div>
   `;
 
   el.querySelector("#sceneLocSelect").addEventListener("change", e => {
     selectedSceneLocId = e.target.value;
     renderScenePanels();
     renderCharList();
+    rerenderDmLog();
+  });
+
+  el.querySelectorAll(".dm-scene-lang-btn").forEach(btn => {
+    btn.addEventListener("click", () => setDmLogLang(btn.dataset.lang));
   });
 
   renderScenePanels();
+  rerenderDmLog();
 }
 
 function renderScenePanels() {
@@ -1764,6 +2621,9 @@ function buildScenePanel(container, locId, sceneKey, sceneData) {
         current: nextData,
         next: deleteField(),
       });
+      const lName = locationLabel(locId) || "a location";
+      notifyPlayers(locId, "🏞️ New scene", `The scene at ${lName} has changed`);
+      notifyDM("🏞️ Scene went live", `Current scene updated at ${lName}`);
     });
 
     container.querySelector(".dm-scene-copy-btn")?.addEventListener("click", async () => {
@@ -1838,8 +2698,7 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
       if (!char) return;
       const pct       = char.hpMax ? Math.round(((char.hp ?? 0) / char.hpMax) * 100) : 100;
       const ringColor = pct > 60 ? "#2ecc71" : pct > 30 ? "#c8a840" : "#c0392b";
-      const portrait  = char.portrait || null;
-      const fallback  = char.emoji || "⚔️";
+      const icon = char.emoji || "⚔️";
 
       div = document.createElement("div");
       div.className    = "dm-scene-token";
@@ -1849,15 +2708,11 @@ function renderTokens(tokenLayer, widthM, heightM, tokens, locId, sceneKey) {
       div.style.height = `${hPct}%`;
       div.innerHTML = `
         <div class="dm-scene-token-bubble">
-          ${portrait
-            ? `<img src="${portrait}" class="dm-scene-bubble-img" alt="${char.name}" />`
-            : `<span class="dm-scene-bubble-emoji">${fallback}</span>`}
+          <span class="dm-scene-bubble-emoji">${icon}</span>
           <span class="dm-scene-bubble-name">${char.name || "?"}</span>
         </div>
         <div class="dm-scene-token-marker" style="border-color:${ringColor}">
-          ${portrait
-            ? `<img src="${portrait}" class="dm-scene-marker-img" alt="${char.name}" />`
-            : `<span class="dm-scene-marker-emoji">${fallback}</span>`}
+          <span class="dm-scene-marker-emoji">${icon}</span>
         </div>
         <button class="dm-scene-token-remove" title="Remove">✕</button>
       `;
@@ -2050,6 +2905,12 @@ function setupTokenDropZone(tokenLayer, widthM, heightM, locId, sceneKey) {
 
 async function saveScene(locId, sceneKey, data) {
   await setDoc(doc(db, "scenes", locId), { [sceneKey]: data ?? null }, { merge: true });
+  // Notify DM whenever any scene slot changes (image upload, token placed, scale changed, etc.)
+  if (data !== null) {
+    const lName = locationLabel(locId) || "a location";
+    const what  = sceneKey === "current" ? "Current" : "Next";
+    notifyDM("🗺️ Scene updated", `${what} scene changed at ${lName}`);
+  }
 }
 
 async function handleSceneImageUpload(file, locId, sceneKey, container, uid) {
